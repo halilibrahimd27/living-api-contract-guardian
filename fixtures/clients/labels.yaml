@@ -1,0 +1,77 @@
+# Ground-truth labels for the miner fixture corpus.
+#
+# Each entry is one expected (method, path_template) endpoint discovered
+# from a fixture subdirectory. The corpus drives the recall metric in
+# `tests/test_mining_recall.py`.
+
+python_requests:
+  - method: GET
+    path: /users
+  - method: GET
+    path: /users/{user_id}
+  - method: POST
+    path: /users
+  - method: PATCH
+    path: /users/{user_id}
+  - method: DELETE
+    path: /users/{user_id}
+  - method: GET
+    path: /search
+  - method: GET
+    path: /healthz
+
+python_httpx:
+  - method: GET
+    path: /v1/orders
+  - method: GET
+    path: /v1/orders/{order_id}
+  - method: POST
+    path: /v1/orders
+  - method: DELETE
+    path: /v1/orders/{order_id}
+  - method: GET
+    path: /v1/orders/{order_id}/items
+
+python_grpc:
+  - method: RPC
+    path: /inventory.Inventory/ListSkus
+  - method: RPC
+    path: /inventory.Inventory/GetSku
+  - method: RPC
+    path: /inventory.Inventory/Reserve
+
+js_fetch:
+  - method: GET
+    path: /products
+  - method: GET
+    path: /products/{productId}
+  - method: POST
+    path: /products
+  - method: DELETE
+    path: /products/{productId}
+  - method: GET
+    path: /healthz
+
+js_axios:
+  - method: GET
+    path: /customers
+  - method: GET
+    path: /customers/{customerId}
+  - method: POST
+    path: /customers
+  - method: PUT
+    path: /customers/{customerId}
+  - method: DELETE
+    path: /customers/{customerId}
+  - method: GET
+    path: /search
+
+ts_axios:
+  - method: GET
+    path: /invoices
+  - method: GET
+    path: /invoices/{invoiceId}
+  - method: POST
+    path: /invoices
+  - method: POST
+    path: /invoices/{invoiceId}/pay
