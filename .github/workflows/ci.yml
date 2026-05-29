@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.3-alpine
+        env:
+          POSTGRES_USER: guardian
+          POSTGRES_PASSWORD: guardian
+          POSTGRES_DB: guardian
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U guardian"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7.2-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg2://guardian:guardian@localhost:5432/guardian
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+      - name: Configure pip for offline wheels
+        run: |
+          mkdir -p vendor/wheels
+          echo "PIP_FIND_LINKS=$(pwd)/vendor/wheels" >> "$GITHUB_ENV"
+      - name: Install project
+        run: |
+          python -m pip install --upgrade pip
+          pip install --find-links=vendor/wheels -e ".[dev]"
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Format check (black)
+        run: black --check .
+      - name: Type check (mypy --strict)
+        run: mypy --strict packages apps
+      - name: Pytest
+        run: pytest -q

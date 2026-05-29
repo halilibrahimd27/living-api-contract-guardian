@@ -10,18 +10,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libpq-dev curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml ./
-RUN pip install --upgrade pip && \
-    pip install \
-      "fastapi>=0.110" "uvicorn[standard]>=0.27" \
-      "sqlalchemy>=2.0.29" "alembic>=1.13" "psycopg2-binary>=2.9" \
-      "pydantic>=2.6" "pydantic-settings>=2.2" \
-      "structlog>=24.1" "redis>=5.0" "httpx>=0.27"
+# Copy vendored wheels first so offline CI/Docker builds can install from
+# them via --find-links.
+COPY vendor/wheels /vendor/wheels
 
-COPY . ./
+COPY pyproject.toml ./
+COPY README.md ./
+COPY packages ./packages
+COPY apps ./apps
+COPY alembic ./alembic
+COPY alembic.ini ./alembic.ini
+
+RUN pip install --upgrade pip && \
+    pip install --find-links=/vendor/wheels . && \
+    pip install --find-links=/vendor/wheels "uvicorn[standard]>=0.27"
 
 ENV PYTHONPATH=/app:/app/packages:/app/apps
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "alembic upgrade head && uvicorn apps.api.main:app --host 0.0.0.0 --port 8000"]
+HEALTHCHECK --interval=10s --timeout=3s --retries=20 \
+  CMD curl -fsS http://localhost:8000/healthz || exit 1
+
+CMD ["sh", "-c", "guardian migrate && uvicorn apps.api.main:app --host 0.0.0.0 --port 8000"]
