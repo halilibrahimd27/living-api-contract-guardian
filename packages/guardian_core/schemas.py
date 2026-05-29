@@ -11,6 +11,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 ContractKind = Literal["openapi", "proto"]
 
 
+class HealthResponse(BaseModel):
+    """Payload returned by ``GET /healthz``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: str
+    git_sha: str
+    db_ok: bool
+    redis_ok: bool
+
+
 class ServiceCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

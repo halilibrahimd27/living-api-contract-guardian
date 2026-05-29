@@ -94,3 +94,16 @@ def test_openapi_without_spec_is_422(client: TestClient) -> None:
 
 def test_health(client: TestClient) -> None:
     assert client.get("/health").json() == {"status": "ok"}
+
+
+def test_healthz_returns_version_and_probes(client: TestClient) -> None:
+    r = client.get("/healthz")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert set(body.keys()) == {"version", "git_sha", "db_ok", "redis_ok"}
+    assert body["version"]
+    assert isinstance(body["db_ok"], bool)
+    assert isinstance(body["redis_ok"], bool)
+    # The migrated SQLite DB used by tests is always reachable; Redis may
+    # not be, but the probe must still return a valid boolean.
+    assert body["db_ok"] is True
