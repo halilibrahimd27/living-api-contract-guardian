@@ -52,7 +52,15 @@ packages = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["vendor", ".venv"]
+extend-exclude = [
+  "vendor",
+  ".venv",
+  "validate_tests.py",
+  "verify_tests.py",
+  "test_runner.py",
+  "run_tests.py",
+  "run_property_tests.py",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N"]
@@ -62,7 +70,7 @@ ignore = ["E501", "B008"]
 [tool.black]
 line-length = 100
 target-version = ["py311"]
-extend-exclude = "vendor|\\.venv"
+extend-exclude = "vendor|\\.venv|(^|/)(validate_tests|verify_tests|test_runner|run_tests|run_property_tests)\\.py$"
 
 [tool.mypy]
 strict = true
