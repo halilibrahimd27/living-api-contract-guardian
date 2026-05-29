@@ -25,12 +25,12 @@ from pydantic import ValidationError
 # Strategies for generating test data
 def _valid_service_name() -> st.SearchStrategy[str]:
     """Generate valid service names (1-255 chars, no special constraints)."""
-    return st.text(min_size=1, max_size=255, alphabet=st.characters(blacklist_categories=()))
+    return st.text(min_size=1, max_size=255, alphabet=st.characters(blacklist_categories=("Cs",)))
 
 
 def _valid_owner() -> st.SearchStrategy[str]:
     """Generate valid owner names (1-255 chars)."""
-    return st.text(min_size=1, max_size=255, alphabet=st.characters(blacklist_categories=()))
+    return st.text(min_size=1, max_size=255, alphabet=st.characters(blacklist_categories=("Cs",)))
 
 
 def _openapi_spec() -> st.SearchStrategy[dict[str, Any]]:

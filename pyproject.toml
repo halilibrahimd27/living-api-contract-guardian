@@ -61,11 +61,6 @@ extend-exclude = [
   "vendor",
   ".venv",
   "fixtures",
-  "validate_tests.py",
-  "verify_tests.py",
-  "test_runner.py",
-  "run_tests.py",
-  "run_property_tests.py",
 ]
 
 [tool.ruff.lint]
@@ -76,7 +71,7 @@ ignore = ["E501", "B008"]
 [tool.black]
 line-length = 100
 target-version = ["py311"]
-extend-exclude = "vendor|\\.venv|(^|/)(validate_tests|verify_tests|test_runner|run_tests|run_property_tests)\\.py$"
+extend-exclude = "vendor|\\.venv"
 
 [tool.mypy]
 strict = true
