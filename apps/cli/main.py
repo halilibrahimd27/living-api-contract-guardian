@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
 import typer
-from guardian_core.db import get_database_url, get_engine
+from guardian_core.db import get_database_url, get_engine, session_scope
 from guardian_core.logging import configure_logging, get_logger
+from guardian_core.mining import mine_repo, persist_call_sites
+from guardian_core.mining.repo_scanner import detect_commit_sha
 from guardian_core.redis_client import get_redis_url, ping_redis
 from guardian_core.version import get_git_sha, get_version
 from sqlalchemy import text
@@ -79,6 +82,40 @@ def migrate() -> None:
     log.info("cli.migrate.start", url=get_database_url())
     command.upgrade(cfg, "head")
     log.info("cli.migrate.done")
+
+
+@app.command("mine")
+def mine(
+    repo: Path = typer.Argument(..., exists=True, file_okay=False, resolve_path=True),
+    repo_name: str = typer.Option(
+        "",
+        "--name",
+        help="Logical repo name to record (defaults to the path's basename).",
+    ),
+    commit_sha: str = typer.Option(
+        "",
+        "--sha",
+        help="Commit SHA to record (default: `git rev-parse HEAD` on the repo).",
+    ),
+) -> None:
+    """Statically mine a client repo for HTTP/gRPC call sites."""
+    configure_logging()
+    log = get_logger("cli.mine")
+
+    name = repo_name or repo.name
+    sha = commit_sha or detect_commit_sha(repo)
+    log.info("cli.mine.start", repo=name, sha=sha, path=str(repo))
+    sites = mine_repo(repo)
+    with session_scope() as session:
+        result = persist_call_sites(session, repo=name, commit_sha=sha, sites=sites)
+    typer.echo(json.dumps(result.model_dump(), sort_keys=True))
+    log.info(
+        "cli.mine.done",
+        repo=name,
+        sha=sha,
+        inserted=result.inserted,
+        skipped=result.skipped,
+    )
 
 
 def main() -> None:

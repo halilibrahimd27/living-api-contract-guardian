@@ -14,10 +14,11 @@ clients: upload a contract on every deploy, and the Guardian fingerprints
 it, extracts its endpoints, and tracks who uses what — so a deprecation
 is a data question, not an archaeology project.
 
-> Status: early scaffold (milestone 1 of a multi-milestone build). The
-> data model, service registry, contract ingestion (hashing +
-> canonicalisation), health surface, CLI, and migrations are in place;
-> endpoint-diffing and usage-analytics endpoints land in later milestones.
+> Status: early build. The data model, service registry, contract
+> ingestion (hashing + canonicalisation), health surface, CLI,
+> migrations, and the **static client AST miner** (Python + JS/TS +
+> gRPC) are in place; endpoint-diffing and usage-analytics endpoints
+> land in later milestones.
 
 ## Why this is useful
 
@@ -33,6 +34,11 @@ HTTP/gRPC contract space is underserved. The Guardian gives you:
   added/removed/changed endpoints.
 - **Usage tracking** — record which client hit which endpoint in which
   time window, so "safe to deprecate?" becomes a query.
+- **Static client mining** — point `guardian mine` at a client
+  repo and the analyzer extracts the API calls it makes (HTTP method,
+  OpenAPI-style path template, query/body field names, gRPC stub
+  invocations) by walking the AST. No runtime instrumentation, no
+  network traffic — just `tree-sitter` over the source.
 
 ## Architecture
 
@@ -44,10 +50,16 @@ packages/
   guardian_core/
     db.py       SQLAlchemy engine + session (DATABASE_URL-driven)
     models.py   Service, Contract, ContractVersion, Endpoint,
-                Client, Usage, Deprecation
+                Client, Usage, Deprecation, InferredEndpoint
     hashing.py  canonicalisation + content hashing of specs
+    mining/     tree-sitter based static client miner
+      python_visitor.py  requests / httpx / gRPC stub call sites
+      js_visitor.py      fetch / axios call sites (JS + TS)
+      path_normalize.py  URL -> OpenAPI {param} templates
+      repo_scanner.py    walk a repo, persist findings
     ...
 alembic/        schema migrations
+fixtures/       sample client repos + labels.yaml (recall corpus)
 tests/          pytest unit suite + Hypothesis property tests
 ```
 
@@ -62,11 +74,13 @@ Data model (one line each):
 | `Client`         | A named API consumer.                                         |
 | `Usage`          | A client's calls to an endpoint over a time window.           |
 | `Deprecation`    | A planned/active deprecation of an endpoint.                  |
+| `InferredEndpoint` | A call site mined from a client repo at a given commit SHA. |
 
 ## Stack
 
 Python 3.11 · FastAPI · SQLAlchemy 2 · Alembic · Pydantic v2 · Typer ·
-Redis (health probe) · SQLite by default, Postgres in production.
+Redis (health probe) · SQLite by default, Postgres in production ·
+`tree-sitter-languages` 1.10 (precompiled grammars) for client mining.
 
 ## Quickstart
 
@@ -88,10 +102,35 @@ uvicorn apps.api.main:app --reload
 ### CLI
 
 ```bash
-guardian version     # package version + git SHA
-guardian health      # probe DB + Redis connectivity
-guardian migrate     # alembic upgrade head
+guardian version                       # package version + git SHA
+guardian health                        # probe DB + Redis connectivity
+guardian migrate                       # alembic upgrade head
+guardian mine ./path/to/client-repo \  # mine a client repo for API calls
+  --name acme/users-client \           #   logical repo identifier
+  --sha 0123abcd                       #   commit SHA (auto-detected if omitted)
 ```
+
+### Static client miner
+
+`guardian mine <repo>` walks a checkout, runs the per-language
+tree-sitter visitor, and persists one `InferredEndpoint` row per
+discovered call site. Out of the box the miner recognises:
+
+| Language    | Libraries / patterns                                  |
+|-------------|-------------------------------------------------------|
+| Python      | `requests`, `httpx` (sync + `AsyncClient`), `*_pb2_grpc` stubs |
+| JavaScript  | `fetch`, `axios` (default + renamed import + `require`) |
+| TypeScript  | `fetch`, `axios` (same shapes as JS, `.tsx` supported) |
+
+Path templates are normalized OpenAPI-style: f-string / template-literal
+placeholders become `{name}`, static numeric/UUID segments collapse to
+`{id}`, and scheme + host are stripped. Field names (query, JSON body,
+gRPC request kwargs) are captured. Re-running the miner against the
+same `(repo, commit_sha)` is a no-op thanks to a per-row content hash.
+
+A small fixture corpus under `fixtures/clients/` plus
+`fixtures/clients/labels.yaml` gives the recall metric exercised by
+`tests/test_mining_recall.py` (≥ 90% across all libraries).
 
 ### HTTP API (current surface)
 
@@ -101,6 +140,9 @@ guardian migrate     # alembic upgrade head
 | POST   | `/services`                  | Register a service                   |
 | GET    | `/services/{id}`             | Fetch a service                      |
 | POST   | `/services/{id}/contracts`   | Upload a contract version (hashed + deduped) |
+
+(Client-mined endpoints are not yet exposed over HTTP; consume them via
+the database, or follow up with `guardian mine` in CI.)
 
 ## Docker
 
