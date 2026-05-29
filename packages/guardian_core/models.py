@@ -207,6 +207,42 @@ class Usage(Base):
     client: Mapped[Client] = relationship("Client", back_populates="usages")
 
 
+class InferredEndpoint(Base):
+    """A client-side API call site discovered by the static AST miner.
+
+    Rows are content-hashed so re-runs of the miner against the same repo
+    + commit SHA are idempotent: a row is identified by
+    ``(repo, commit_sha, content_hash)`` and re-mining upserts the same
+    record. ``fields`` carries the inferred query/body parameter names.
+    """
+
+    __tablename__ = "inferred_endpoints"
+    __table_args__ = (
+        UniqueConstraint(
+            "repo",
+            "commit_sha",
+            "content_hash",
+            name="uq_inferred_endpoints_repo_commit_hash",
+        ),
+        Index("ix_inferred_endpoints_repo_commit", "repo", "commit_sha"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    repo: Mapped[str] = mapped_column(String(512), nullable=False)
+    commit_sha: Mapped[str] = mapped_column(String(64), nullable=False)
+    file: Mapped[str] = mapped_column(String(1024), nullable=False)
+    line: Mapped[int] = mapped_column(Integer, nullable=False)
+    language: Mapped[str] = mapped_column(String(32), nullable=False)
+    client_library: Mapped[str] = mapped_column(String(64), nullable=False)
+    method: Mapped[str] = mapped_column(String(32), nullable=False)
+    path_template: Mapped[str] = mapped_column(String(1024), nullable=False)
+    fields: Mapped[dict[str, Any]] = mapped_column(JsonDict, nullable=False, default=dict)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
+    )
+
+
 class Deprecation(Base):
     """A deprecation notice for an endpoint, tied to a contract version."""
 
