@@ -4,10 +4,20 @@ from __future__ import annotations
 
 from sqlalchemy import Inspector
 
+CORE_TABLES = {
+    "services",
+    "contracts",
+    "contract_versions",
+    "clients",
+    "endpoints",
+    "usages",
+    "deprecations",
+}
+
 
 def test_migrations_create_core_tables(inspector: Inspector) -> None:
     tables = set(inspector.get_table_names())
-    assert {"services", "contracts", "contract_versions", "clients"}.issubset(tables)
+    assert CORE_TABLES.issubset(tables), f"missing tables: {CORE_TABLES - tables}"
 
 
 def test_services_columns(inspector: Inspector) -> None:
@@ -34,8 +44,57 @@ def test_contract_versions_columns(inspector: Inspector) -> None:
     }.issubset(cols)
 
 
+def test_endpoints_columns(inspector: Inspector) -> None:
+    cols = {c["name"] for c in inspector.get_columns("endpoints")}
+    assert {
+        "id",
+        "contract_version_id",
+        "service_id",
+        "method",
+        "path",
+        "operation_id",
+        "fingerprint",
+        "spec_excerpt",
+        "created_at",
+    }.issubset(cols)
+
+
+def test_usages_columns(inspector: Inspector) -> None:
+    cols = {c["name"] for c in inspector.get_columns("usages")}
+    assert {
+        "id",
+        "endpoint_id",
+        "client_id",
+        "window_start",
+        "window_end",
+        "request_count",
+        "source",
+        "created_at",
+    }.issubset(cols)
+
+
+def test_deprecations_columns(inspector: Inspector) -> None:
+    cols = {c["name"] for c in inspector.get_columns("deprecations")}
+    assert {
+        "id",
+        "contract_version_id",
+        "endpoint_id",
+        "status",
+        "reason",
+        "sunset_at",
+        "notes",
+        "created_at",
+    }.issubset(cols)
+
+
 def test_unique_constraints(inspector: Inspector) -> None:
     uniques = {u["name"] for u in inspector.get_unique_constraints("contract_versions")}
     assert "uq_versions_service_hash" in uniques
     uniques_c = {u["name"] for u in inspector.get_unique_constraints("contracts")}
     assert "uq_contracts_service_name" in uniques_c
+    uniques_e = {u["name"] for u in inspector.get_unique_constraints("endpoints")}
+    assert "uq_endpoints_version_method_path" in uniques_e
+    uniques_u = {u["name"] for u in inspector.get_unique_constraints("usages")}
+    assert "uq_usages_endpoint_client_window" in uniques_u
+    uniques_d = {u["name"] for u in inspector.get_unique_constraints("deprecations")}
+    assert "uq_deprecations_version_endpoint" in uniques_d

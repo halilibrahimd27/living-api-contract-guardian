@@ -1,15 +1,22 @@
-"""SQLAlchemy 2.0 ORM models for Guardian core entities."""
+"""SQLAlchemy 2.0 ORM models for Guardian core entities.
+
+Identifiers are UUID7 strings (time-ordered) generated via ``uuid_utils``.
+JSON columns transparently map to ``JSONB`` on PostgreSQL and ``JSON``
+elsewhere (e.g. SQLite for tests).
+"""
 
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+import uuid_utils
 from sqlalchemy import (
     JSON,
     DateTime,
     ForeignKey,
+    Index,
+    Integer,
     LargeBinary,
     String,
     UniqueConstraint,
@@ -24,7 +31,8 @@ def _utcnow() -> datetime:
 
 
 def _new_id() -> str:
-    return str(uuid.uuid4())
+    """Generate a UUID7 string id (time-ordered for clustered inserts)."""
+    return str(uuid_utils.uuid7())
 
 
 JsonDict = JSON().with_variant(JSONB(), "postgresql")
@@ -49,6 +57,9 @@ class Service(Base):
     )
     contract_versions: Mapped[list[ContractVersion]] = relationship(
         "ContractVersion", back_populates="service", cascade="all, delete-orphan"
+    )
+    endpoints: Mapped[list[Endpoint]] = relationship(
+        "Endpoint", back_populates="service", cascade="all, delete-orphan"
     )
 
 
@@ -95,6 +106,12 @@ class ContractVersion(Base):
 
     contract: Mapped[Contract] = relationship("Contract", back_populates="versions")
     service: Mapped[Service] = relationship("Service", back_populates="contract_versions")
+    endpoints: Mapped[list[Endpoint]] = relationship(
+        "Endpoint", back_populates="contract_version", cascade="all, delete-orphan"
+    )
+    deprecations: Mapped[list[Deprecation]] = relationship(
+        "Deprecation", back_populates="contract_version", cascade="all, delete-orphan"
+    )
 
 
 class Client(Base):
@@ -106,3 +123,119 @@ class Client(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
     )
+
+    usages: Mapped[list[Usage]] = relationship(
+        "Usage", back_populates="client", cascade="all, delete-orphan"
+    )
+
+
+class Endpoint(Base):
+    """A single operation extracted from a contract version.
+
+    For OpenAPI: ``(method, path)`` keys an operation.
+    For Protobuf: ``method`` carries the RPC verb and ``path`` is the
+    fully-qualified rpc name (``package.Service/Method``).
+    """
+
+    __tablename__ = "endpoints"
+    __table_args__ = (
+        UniqueConstraint(
+            "contract_version_id",
+            "method",
+            "path",
+            name="uq_endpoints_version_method_path",
+        ),
+        Index("ix_endpoints_service", "service_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    contract_version_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("contract_versions.id", ondelete="CASCADE"), nullable=False
+    )
+    service_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("services.id", ondelete="CASCADE"), nullable=False
+    )
+    method: Mapped[str] = mapped_column(String(32), nullable=False)
+    path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    operation_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    spec_excerpt: Mapped[dict[str, Any]] = mapped_column(JsonDict, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
+    )
+
+    service: Mapped[Service] = relationship("Service", back_populates="endpoints")
+    contract_version: Mapped[ContractVersion] = relationship(
+        "ContractVersion", back_populates="endpoints"
+    )
+    usages: Mapped[list[Usage]] = relationship(
+        "Usage", back_populates="endpoint", cascade="all, delete-orphan"
+    )
+
+
+class Usage(Base):
+    """Per-client observation of an endpoint over a time window."""
+
+    __tablename__ = "usages"
+    __table_args__ = (
+        UniqueConstraint(
+            "endpoint_id",
+            "client_id",
+            "window_start",
+            name="uq_usages_endpoint_client_window",
+        ),
+        Index("ix_usages_endpoint", "endpoint_id"),
+        Index("ix_usages_client", "client_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    endpoint_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("endpoints.id", ondelete="CASCADE"), nullable=False
+    )
+    client_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False
+    )
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    window_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    source: Mapped[str] = mapped_column(String(64), nullable=False, default="manual")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
+    )
+
+    endpoint: Mapped[Endpoint] = relationship("Endpoint", back_populates="usages")
+    client: Mapped[Client] = relationship("Client", back_populates="usages")
+
+
+class Deprecation(Base):
+    """A deprecation notice for an endpoint, tied to a contract version."""
+
+    __tablename__ = "deprecations"
+    __table_args__ = (
+        UniqueConstraint(
+            "contract_version_id",
+            "endpoint_id",
+            name="uq_deprecations_version_endpoint",
+        ),
+        Index("ix_deprecations_endpoint", "endpoint_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    contract_version_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("contract_versions.id", ondelete="CASCADE"), nullable=False
+    )
+    endpoint_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("endpoints.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="proposed")
+    reason: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    sunset_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[dict[str, Any]] = mapped_column(JsonDict, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
+    )
+
+    contract_version: Mapped[ContractVersion] = relationship(
+        "ContractVersion", back_populates="deprecations"
+    )
+    endpoint: Mapped[Endpoint] = relationship("Endpoint")
