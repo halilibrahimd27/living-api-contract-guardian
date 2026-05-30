@@ -34,6 +34,7 @@ dependencies = [
 dev = [
   "pytest>=8.0",
   "pytest-asyncio>=0.23",
+  "pytest-timeout>=2.3",
   "hypothesis>=6.100",
   "ruff>=0.4",
   "black>=24.3",
@@ -118,3 +119,7 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 pythonpath = ["packages", "apps", "."]
 asyncio_mode = "auto"
+# pytest-timeout: cap any single test at 60s by default; the CI-diff
+# fixture tests pin themselves tighter with @pytest.mark.timeout(...).
+timeout = 60
+timeout_method = "thread"
