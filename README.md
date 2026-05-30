@@ -18,9 +18,10 @@ is a data question, not an archaeology project.
 > ingestion (hashing + canonicalisation), health surface, CLI,
 > migrations, the **static client AST miner** (Python + JS/TS + gRPC),
 > the **traffic-replay contract augmentor** (HAR + gRPC log → merged
-> "de-facto contract"), and the **evolution rule engine** (additive /
-> behavioral / breaking classification for OpenAPI + protobuf) are in
-> place; usage-analytics endpoints land in later milestones.
+> "de-facto contract"), the **evolution rule engine** (additive /
+> behavioral / breaking classification for OpenAPI + protobuf), and
+> the **GitHub App + reusable Action** that gate PRs on breaking diffs
+> are in place; usage-analytics endpoints land in later milestones.
 
 ## Why this is useful
 
@@ -55,7 +56,8 @@ HTTP/gRPC contract space is underserved. The Guardian gives you:
 ```
 apps/
   api/        FastAPI app: /healthz, /services, contract upload
-  cli/        `guardian` Typer CLI: version / health / migrate
+  cli/        `guardian` Typer CLI: version / health / migrate / diff
+  github_app/ Probot 13.x App (Node 20): PR checks + comments
 packages/
   guardian_core/
     db.py       SQLAlchemy engine + session (DATABASE_URL-driven)
@@ -102,6 +104,7 @@ Data model (one line each):
 | `Usage`          | A client's calls to an endpoint over a time window.           |
 | `Deprecation`    | A planned/active deprecation of an endpoint.                  |
 | `InferredEndpoint` | A call site mined from a client repo at a given commit SHA. |
+| `CiRun`          | A persisted GitHub PR check run produced by the App.          |
 
 `ChangeReport` (returned by `POST /diff`, not persisted) is a transient
 pydantic-v2 payload: `{contract_kind, changes[ChangeRecord], summary,
@@ -141,6 +144,10 @@ guardian migrate                       # alembic upgrade head
 guardian mine ./path/to/client-repo \  # mine a client repo for API calls
   --name acme/users-client \           #   logical repo identifier
   --sha 0123abcd                       #   commit SHA (auto-detected if omitted)
+guardian diff \                        # diff two specs (used by GitHub Action)
+  --base before.json --head after.json \
+  --format github                      #   github | text | json
+  # exits with code 2 on breaking changes unless --accept-breaking is set
 ```
 
 ### Static client miner
@@ -176,6 +183,8 @@ A small fixture corpus under `fixtures/clients/` plus
 | POST   | `/ingest/traffic`            | Ingest HAR + gRPC log → de-facto contract id |
 | GET    | `/ingest/defacto/{id}`       | Fetch a materialized de-facto contract |
 | POST   | `/diff`                      | Diff two contract versions → classified ChangeReport |
+| POST   | `/ci/runs`                   | Upsert a persisted GitHub PR check run (used by the App) |
+| GET    | `/ci/runs/{owner}/{repo}/{pr}` | Most recent persisted CI run for a PR    |
 
 The traffic endpoint accepts a multipart form with `service_id`
 (required), an optional `client_id`, and at least one of `har` (an HTTP
@@ -232,6 +241,54 @@ curl -sS -X POST http://127.0.0.1:8000/diff \
 #     "kind":"openapi.path.removed","verdict":"breaking",
 #     "rule_id":"OAS-PATH-REMOVED", ...}], ...}
 ```
+
+### GitHub CI integration
+
+Guardian ships with a **reusable composite GitHub Action** plus a
+**Probot 13.x App** that together gate PRs on breaking API changes.
+
+The composite action (`./action.yml` at the repo root) materialises the
+spec at both refs via `git show <sha>:<spec_path>`, then shells out to
+`guardian diff`. It fails the workflow when breaking changes are
+detected unless `accept_breaking: true` is set (typically by checking
+for the `guardian:accept-breaking` PR label):
+
+```yaml
+# .github/workflows/api-diff.yml
+on: pull_request
+jobs:
+  diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: your-org/living-api-contract-guardian@v1
+        with:
+          base_sha: ${{ github.event.pull_request.base.sha }}
+          head_sha: ${{ github.event.pull_request.head.sha }}
+          spec_path: openapi.json
+          accept_breaking: ${{ contains(github.event.pull_request.labels.*.name, 'guardian:accept-breaking') }}
+```
+
+The CLI has the same surface for local use:
+
+```bash
+guardian diff \
+  --base fixtures/diff/openapi.base.json \
+  --head fixtures/diff/openapi.head_breaking.json \
+  --format github \
+  --summary-out $GITHUB_STEP_SUMMARY
+echo "exit=$?"  # → 2 when breaking changes are detected
+```
+
+The Probot App (under `apps/github_app/`) subscribes to PR webhooks,
+posts a Checks API check run + a PR comment with the same Markdown
+body (including the per-client impact table), and upserts the result
+to `POST /ci/runs` so the run is keyed by `(repo, pr_number,
+head_sha)` in `ci_runs`. Webhook payloads are HMAC-verified by
+`@octokit/webhooks` before any handler runs. See
+[`apps/github_app/README.md`](apps/github_app/README.md) for the
+installation and offline-replay workflow.
 
 ## Docker
 
