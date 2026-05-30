@@ -61,8 +61,9 @@ def _iso_timestamp() -> st.SearchStrategy[str]:
     return st.builds(
         lambda dt: dt.isoformat(),
         dt=st.datetimes(
-            min_value=datetime(2020, 1, 1, tzinfo=UTC),
-            max_value=datetime(2030, 12, 31, tzinfo=UTC),
+            min_value=datetime(2020, 1, 1),
+            max_value=datetime(2030, 12, 31),
+            timezones=st.just(UTC),
         ),
     )
 
@@ -215,7 +216,9 @@ class TestComputeBatchHash:
         har_bytes: bytes,
         grpc_bytes: bytes,
     ) -> None:
-        """(har, grpc) produces different hash than (grpc, har)."""
+        """(har, grpc) produces different hash than (grpc, har) when they differ."""
+        if har_bytes == grpc_bytes:
+            return  # symmetric case: same payload on both sides → same hash
         hash1 = compute_batch_hash(har_bytes, grpc_bytes)
         hash2 = compute_batch_hash(grpc_bytes, har_bytes)
         assert hash1 != hash2
@@ -279,15 +282,15 @@ class TestParseTimestamp:
 class TestMaxTimestamp:
     """Property tests for timestamp comparison."""
 
-    @given(st.datetimes(tzinfo=UTC))
+    @given(st.datetimes(timezones=st.just(UTC)))
     def test_max_of_equal_timestamps_returns_first(self, dt: datetime) -> None:
         """max(t, t) returns t (first argument)."""
         result = _max_timestamp(dt, dt)
         assert result is dt
 
     @given(
-        dt1=st.datetimes(tzinfo=UTC),
-        dt2=st.datetimes(tzinfo=UTC),
+        dt1=st.datetimes(timezones=st.just(UTC)),
+        dt2=st.datetimes(timezones=st.just(UTC)),
     )
     def test_max_returns_later_timestamp(self, dt1: datetime, dt2: datetime) -> None:
         """Result is >= both inputs."""
@@ -300,8 +303,8 @@ class TestMaxTimestamp:
         assert result_aware >= t2_aware
 
     @given(
-        dt1=st.datetimes(tzinfo=UTC),
-        dt2=st.datetimes(tzinfo=UTC),
+        dt1=st.datetimes(timezones=st.just(UTC)),
+        dt2=st.datetimes(timezones=st.just(UTC)),
     )
     def test_max_returns_input_object(self, dt1: datetime, dt2: datetime) -> None:
         """Result is one of the input objects (by identity)."""
@@ -512,7 +515,7 @@ class TestIdempotencyProperties:
 class TestTimestampInvariants:
     """Test invariants about timestamp handling across system."""
 
-    @given(st.datetimes(tzinfo=UTC))
+    @given(st.datetimes(timezones=st.just(UTC)))
     def test_parsed_timestamp_is_aware(self, dt: datetime) -> None:
         """All timestamps from _parse_timestamp have timezone."""
         ts_str = dt.isoformat()
@@ -529,8 +532,8 @@ class TestTimestampInvariants:
         assert before <= result <= after + timedelta(seconds=1)
 
     @given(
-        ts1=st.datetimes(tzinfo=UTC),
-        ts2=st.datetimes(tzinfo=UTC),
+        ts1=st.datetimes(timezones=st.just(UTC)),
+        ts2=st.datetimes(timezones=st.just(UTC)),
     )
     def test_max_timestamp_consistency(self, ts1: datetime, ts2: datetime) -> None:
         """max_timestamp is consistent with >= comparison."""
