@@ -1,0 +1,35 @@
+{
+  "action": "opened",
+  "number": 42,
+  "pull_request": {
+    "number": 42,
+    "state": "open",
+    "title": "Remove /users endpoint",
+    "labels": [],
+    "base": {
+      "sha": "0000000000000000000000000000000000000001",
+      "ref": "main",
+      "repo": {
+        "name": "users",
+        "full_name": "acme/users",
+        "owner": { "login": "acme" }
+      }
+    },
+    "head": {
+      "sha": "0000000000000000000000000000000000000002",
+      "ref": "feature/remove-users",
+      "repo": {
+        "name": "users",
+        "full_name": "acme/users",
+        "owner": { "login": "acme" }
+      }
+    }
+  },
+  "repository": {
+    "name": "users",
+    "full_name": "acme/users",
+    "owner": { "login": "acme" }
+  },
+  "installation": { "id": 1 },
+  "sender": { "login": "test-user" }
+}

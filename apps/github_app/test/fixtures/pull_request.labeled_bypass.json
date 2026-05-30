@@ -1,0 +1,36 @@
+{
+  "action": "labeled",
+  "number": 42,
+  "pull_request": {
+    "number": 42,
+    "state": "open",
+    "title": "Remove /users endpoint",
+    "labels": [{ "name": "guardian:accept-breaking" }],
+    "base": {
+      "sha": "0000000000000000000000000000000000000001",
+      "ref": "main",
+      "repo": {
+        "name": "users",
+        "full_name": "acme/users",
+        "owner": { "login": "acme" }
+      }
+    },
+    "head": {
+      "sha": "0000000000000000000000000000000000000002",
+      "ref": "feature/remove-users",
+      "repo": {
+        "name": "users",
+        "full_name": "acme/users",
+        "owner": { "login": "acme" }
+      }
+    }
+  },
+  "label": { "name": "guardian:accept-breaking" },
+  "repository": {
+    "name": "users",
+    "full_name": "acme/users",
+    "owner": { "login": "acme" }
+  },
+  "installation": { "id": 1 },
+  "sender": { "login": "test-user" }
+}

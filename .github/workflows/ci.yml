@@ -53,3 +53,13 @@ jobs:
         run: mypy --strict packages apps
       - name: Pytest
         run: pytest -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: GitHub App offline tests
+        # The Probot app's offline test suite uses Node 20's built-in
+        # `node --test` runner and only imports modules from Node core
+        # plus the app's own source files, so no `npm install` is
+        # required for the gate to be meaningful — a regression that
+        # broke `handlePullRequest` would still fail this step.
+        run: node --test apps/github_app/test/*.test.js
