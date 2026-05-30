@@ -1,0 +1,171 @@
+# Living API Contract Guardian — default classification rules.
+#
+# Format: each rule maps a canonical raw-change `kind` (emitted by the
+# OpenAPI / protobuf diff walkers) to a verdict in {additive, behavioral,
+# breaking}, with a short rationale used in the ChangeReport. Add a
+# `location_glob` to scope a rule to a subset of locations.
+#
+# A custom YAML can override any rule by id — see RuleSet.merge.
+
+id: default
+
+rules:
+  # ---------- OpenAPI: path / operation surface ----------
+  - id: OAS-PATH-ADDED
+    kind: openapi.path.added
+    verdict: additive
+    rationale: New path added; no existing client URLs change.
+  - id: OAS-PATH-REMOVED
+    kind: openapi.path.removed
+    verdict: breaking
+    rationale: Path removed; any client calling this URL will receive 404.
+  - id: OAS-OP-ADDED
+    kind: openapi.operation.added
+    verdict: additive
+    rationale: New HTTP method on an existing path; pre-existing methods unaffected.
+  - id: OAS-OP-REMOVED
+    kind: openapi.operation.removed
+    verdict: breaking
+    rationale: Operation removed; callers using this method will fail.
+
+  # ---------- OpenAPI: parameters ----------
+  - id: OAS-PARAM-ADDED-OPTIONAL
+    kind: openapi.parameter.added.optional
+    verdict: additive
+    rationale: New optional parameter; existing requests still validate.
+  - id: OAS-PARAM-ADDED-REQUIRED
+    kind: openapi.parameter.added.required
+    verdict: breaking
+    rationale: New required parameter; existing requests omitting it will fail validation.
+  - id: OAS-PARAM-REMOVED
+    kind: openapi.parameter.removed
+    verdict: behavioral
+    rationale: Parameter removed; clients sending it will see it silently ignored.
+  - id: OAS-PARAM-REQUIRED-INCREASED
+    kind: openapi.parameter.required.increased
+    verdict: breaking
+    rationale: Parameter became required; older clients omitting it will fail validation.
+  - id: OAS-PARAM-REQUIRED-DECREASED
+    kind: openapi.parameter.required.decreased
+    verdict: additive
+    rationale: Parameter is now optional; existing clients still satisfy the schema.
+  - id: OAS-PARAM-TYPE-CHANGED
+    kind: openapi.parameter.type_changed
+    verdict: breaking
+    rationale: Parameter type changed; serialization contract broken.
+
+  # ---------- OpenAPI: request body ----------
+  - id: OAS-BODY-PROP-ADDED-OPTIONAL
+    kind: openapi.request_body.property.added.optional
+    verdict: additive
+    rationale: New optional body property; existing requests still validate.
+  - id: OAS-BODY-PROP-ADDED-REQUIRED
+    kind: openapi.request_body.property.added.required
+    verdict: breaking
+    rationale: New required body property; existing requests omitting it will fail validation.
+  - id: OAS-BODY-PROP-REMOVED
+    kind: openapi.request_body.property.removed
+    verdict: breaking
+    rationale: Required body property removed; clients sending it now see it rejected by strict schemas.
+  - id: OAS-BODY-PROP-TYPE-CHANGED
+    kind: openapi.request_body.property.type_changed
+    verdict: breaking
+    rationale: Body property type changed; existing serializations no longer validate.
+  - id: OAS-BODY-PROP-REQUIRED-INCREASED
+    kind: openapi.request_body.property.required.increased
+    verdict: breaking
+    rationale: Body property became required; existing client payloads omitting it will fail.
+  - id: OAS-BODY-PROP-REQUIRED-DECREASED
+    kind: openapi.request_body.property.required.decreased
+    verdict: additive
+    rationale: Body property is now optional; older clients still satisfy the schema.
+
+  # ---------- OpenAPI: responses ----------
+  - id: OAS-RESPONSE-ADDED
+    kind: openapi.response.added
+    verdict: behavioral
+    rationale: New response status code; clients with strict status handling may not anticipate it.
+  - id: OAS-RESPONSE-REMOVED
+    kind: openapi.response.removed
+    verdict: breaking
+    rationale: Documented response code removed; clients relying on it may stop functioning.
+  - id: OAS-RESPONSE-PROP-ADDED
+    kind: openapi.response.property.added
+    verdict: additive
+    rationale: New field added to response payload; tolerant clients are unaffected.
+  - id: OAS-RESPONSE-PROP-REMOVED
+    kind: openapi.response.property.removed
+    verdict: breaking
+    rationale: Response field removed; clients reading it will see undefined / null.
+  - id: OAS-RESPONSE-PROP-TYPE-CHANGED
+    kind: openapi.response.property.type_changed
+    verdict: breaking
+    rationale: Response field type changed; clients deserializing it will fail.
+
+  # ---------- OpenAPI: schemas ----------
+  - id: OAS-ENUM-VALUE-ADDED
+    kind: openapi.enum.value.added
+    verdict: behavioral
+    rationale: New enum value; closed-set clients may not handle it gracefully.
+  - id: OAS-ENUM-VALUE-REMOVED
+    kind: openapi.enum.value.removed
+    verdict: breaking
+    rationale: Enum value removed; clients sending or receiving it will fail validation.
+
+  # ---------- Protobuf ----------
+  - id: PROTO-MESSAGE-ADDED
+    kind: proto.message.added
+    verdict: additive
+    rationale: New message type; existing wire formats unchanged.
+  - id: PROTO-MESSAGE-REMOVED
+    kind: proto.message.removed
+    verdict: breaking
+    rationale: Message type removed; any RPC referencing it will fail to encode/decode.
+  - id: PROTO-FIELD-ADDED
+    kind: proto.field.added
+    verdict: additive
+    rationale: New field added; absent on old payloads, ignored by old clients.
+  - id: PROTO-FIELD-REMOVED
+    kind: proto.field.removed
+    verdict: breaking
+    rationale: Field removed; wire-format contract broken — old payloads will surface unknown fields.
+  - id: PROTO-FIELD-NUMBER-CHANGED
+    kind: proto.field.number_changed
+    verdict: breaking
+    rationale: Field number changed; wire format is keyed by tag number, this re-binds the data.
+  - id: PROTO-FIELD-TYPE-CHANGED
+    kind: proto.field.type_changed
+    verdict: breaking
+    rationale: Field type changed; existing encoded payloads will fail to decode.
+  - id: PROTO-FIELD-LABEL-CHANGED
+    kind: proto.field.label_changed
+    verdict: breaking
+    rationale: Field cardinality (optional/required/repeated) changed; canonical wire-format break.
+  - id: PROTO-FIELD-RENAMED
+    kind: proto.field.renamed
+    verdict: behavioral
+    rationale: Field name changed but number/type preserved; wire format intact, but generated code APIs break.
+  - id: PROTO-SERVICE-ADDED
+    kind: proto.service.added
+    verdict: additive
+    rationale: New service; no impact on existing RPC clients.
+  - id: PROTO-SERVICE-REMOVED
+    kind: proto.service.removed
+    verdict: breaking
+    rationale: Service removed; all RPC calls into it will fail.
+  - id: PROTO-RPC-ADDED
+    kind: proto.rpc.added
+    verdict: additive
+    rationale: New RPC method; existing clients unaffected.
+  - id: PROTO-RPC-REMOVED
+    kind: proto.rpc.removed
+    verdict: breaking
+    rationale: RPC method removed; clients will receive UNIMPLEMENTED.
+  - id: PROTO-RPC-REQUEST-TYPE-CHANGED
+    kind: proto.rpc.request_type_changed
+    verdict: breaking
+    rationale: RPC request type changed; client/server contract is severed.
+  - id: PROTO-RPC-RESPONSE-TYPE-CHANGED
+    kind: proto.rpc.response_type_changed
+    verdict: breaking
+    rationale: RPC response type changed; client/server contract is severed.
