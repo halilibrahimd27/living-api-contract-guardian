@@ -1,0 +1,2 @@
+{"path": "/billing.OrderService/CreateOrder", "method": "POST", "client": "billing-worker", "status": 0, "timestamp": "2026-05-29T10:01:00Z", "request": {"user_id": 123, "items": [{"sku": "abc", "qty": 2}]}, "response": {"order_id": "o-1", "status": "pending"}}
+{"path": "/billing.OrderService/CreateOrder", "method": "POST", "client": "billing-worker", "status": 0, "timestamp": "2026-05-29T10:01:30Z", "request": {"user_id": 456, "items": [{"sku": "xyz", "qty": 1}]}, "response": {"order_id": "o-2", "status": "shipped"}}
