@@ -23,6 +23,10 @@ dependencies = [
   "tree-sitter==0.20.4",
   "tree-sitter-languages==1.10.2",
   "PyYAML>=6.0",
+  "haralyzer>=2.4,<3",
+  "genson>=1.3,<2",
+  "ijson>=3.2,<4",
+  "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
@@ -48,6 +52,7 @@ packages = [
   "apps.cli",
   "guardian_core",
   "guardian_core.mining",
+  "guardian_core.traffic",
 ]
 
 [tool.setuptools.package-dir]
@@ -92,6 +97,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["tree_sitter.*", "tree_sitter_languages.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["haralyzer.*", "genson.*", "ijson.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

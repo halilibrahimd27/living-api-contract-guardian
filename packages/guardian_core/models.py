@@ -243,6 +243,140 @@ class InferredEndpoint(Base):
     )
 
 
+class IngestBatch(Base):
+    """One traffic-ingest invocation: HAR upload, gRPC log dump, etc.
+
+    The ``batch_hash`` is a stable content hash over the raw payload; the
+    ``(service_id, batch_hash)`` unique constraint lets re-uploading the
+    exact same traffic dump be detected and de-duplicated by the ingestor.
+    """
+
+    __tablename__ = "ingest_batches"
+    __table_args__ = (
+        UniqueConstraint("service_id", "batch_hash", name="uq_ingest_batches_service_hash"),
+        Index("ix_ingest_batches_service", "service_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    service_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("services.id", ondelete="CASCADE"), nullable=False
+    )
+    batch_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    client_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    record_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
+    )
+
+
+class ObservedEndpoint(Base):
+    """An endpoint inferred from traffic and merged across ingest batches.
+
+    Keyed by ``(service_id, method, path_template)``. ``request_schema`` and
+    ``response_schema`` are JSON Schemas built incrementally with genson;
+    ``sample_count`` and ``last_seen_at`` are roll-up telemetry.
+    ``matched_endpoint_id`` is the static-contract endpoint this observed
+    endpoint resolved against (NULL if no static match — i.e. drift).
+    """
+
+    __tablename__ = "observed_endpoints"
+    __table_args__ = (
+        UniqueConstraint(
+            "service_id",
+            "method",
+            "path_template",
+            name="uq_observed_endpoints_service_method_path",
+        ),
+        Index("ix_observed_endpoints_service", "service_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    service_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("services.id", ondelete="CASCADE"), nullable=False
+    )
+    method: Mapped[str] = mapped_column(String(32), nullable=False)
+    path_template: Mapped[str] = mapped_column(String(1024), nullable=False)
+    matched_endpoint_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    request_schema: Mapped[dict[str, Any]] = mapped_column(JsonDict, nullable=False, default=dict)
+    response_schema: Mapped[dict[str, Any]] = mapped_column(JsonDict, nullable=False, default=dict)
+    sample_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
+    )
+
+
+class FieldUsage(Base):
+    """Per-field telemetry row, idempotent over a single ingest batch.
+
+    Each row records the count + last-seen timestamp for a JSON field path
+    (e.g. ``$.body.user.email``) under a specific observed endpoint, for a
+    specific client, in a specific ingest batch. The unique constraint on
+    ``(endpoint_id, field_path, field_role, client_id, ingest_batch_hash)``
+    means re-ingesting the exact same batch is a no-op for counts and only
+    refreshes ``last_seen_at``.
+    """
+
+    __tablename__ = "field_usages"
+    __table_args__ = (
+        UniqueConstraint(
+            "endpoint_id",
+            "field_path",
+            "field_role",
+            "client_id",
+            "ingest_batch_hash",
+            name="uq_field_usages_idempotency",
+        ),
+        Index("ix_field_usages_endpoint", "endpoint_id"),
+        Index("ix_field_usages_endpoint_path", "endpoint_id", "field_path"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    endpoint_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("observed_endpoints.id", ondelete="CASCADE"), nullable=False
+    )
+    field_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    field_role: Mapped[str] = mapped_column(String(16), nullable=False)
+    client_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    ingest_batch_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    json_types: Mapped[dict[str, Any]] = mapped_column(JsonDict, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
+    )
+
+
+class DefactoContract(Base):
+    """A materialized 'de-facto' contract: static spec merged with traffic.
+
+    One row per ``POST /ingest/traffic`` invocation; ``contract_json``
+    contains the merged OpenAPI-shaped document at the moment the batch
+    was ingested. ``ingest_batch_id`` is the producing batch.
+    """
+
+    __tablename__ = "defacto_contracts"
+    __table_args__ = (Index("ix_defacto_contracts_service", "service_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    service_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("services.id", ondelete="CASCADE"), nullable=False
+    )
+    ingest_batch_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("ingest_batches.id", ondelete="CASCADE"), nullable=False
+    )
+    contract_json: Mapped[dict[str, Any]] = mapped_column(JsonDict, nullable=False, default=dict)
+    endpoint_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    observed_endpoint_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    materialized_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
+    )
+
+
 class Deprecation(Base):
     """A deprecation notice for an endpoint, tied to a contract version."""
 
