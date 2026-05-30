@@ -357,9 +357,7 @@ class TestMergeSchemaDicts:
             assert isinstance(result["properties"], dict)
 
     @given(_schema_with_required())
-    def test_merge_preserves_required_semantics(
-        self, schema_a: dict[str, Any]
-    ) -> None:
+    def test_merge_preserves_required_semantics(self, schema_a: dict[str, Any]) -> None:
         """Merging required fields follows intersection/union logic."""
         # When both schemas have required fields, intersection makes sense
         # for union types (field must be required in both to be guaranteed)

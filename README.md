@@ -73,6 +73,7 @@ packages/
       url_match.py         OpenAPI route-tree match w/ heuristic fallback
       ingestor.py          orchestrator + idempotent ON CONFLICT upserts
       defacto.py           static spec ⊕ observed → merged contract
+      _merge.py            shared JSON-schema union helper
     ...
 alembic/        schema migrations
 fixtures/       sample client repos + labels.yaml (recall corpus)
@@ -188,13 +189,16 @@ Brings up Postgres + the API (`/healthz` is the container healthcheck).
 ## Development
 
 ```bash
-ruff check .                 # lint
-mypy --strict apps packages  # types
-pytest -q                    # unit + property tests
+make verify                  # the full CI gate: lint + format + types + tests
+# or, individually:
+make lint                    # ruff check .
+make format-check            # black --check .
+make types                   # mypy --strict packages apps
+make test                    # pytest -q  (unit + Hypothesis property tests)
 ```
 
-The full gate (`ruff` + `black --check` + `mypy --strict` + `pytest`)
-also runs in GitHub Actions on every push — see `.github/workflows/ci.yml`.
+`make verify` is what GitHub Actions runs on every push — see
+`.github/workflows/ci.yml`. The Reviewer uses the same gate.
 
 ## License
 

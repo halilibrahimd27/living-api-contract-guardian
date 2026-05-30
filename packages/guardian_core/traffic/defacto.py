@@ -20,6 +20,8 @@ import copy
 from collections.abc import Iterable
 from typing import Any
 
+from guardian_core.traffic._merge import merge_json_schemas
+
 
 def build_defacto_contract(
     static_spec: dict[str, Any] | None,
@@ -103,38 +105,6 @@ def build_defacto_contract(
     return base
 
 
-def _merge_schemas(existing: dict[str, Any] | None, incoming: dict[str, Any]) -> dict[str, Any]:
-    """Shallow-merge two JSON schemas, preferring observed types as a union.
-
-    Real schema-merging is a deep topic; we take a pragmatic stance:
-    - if both are object schemas, union their ``properties`` and
-      ``required`` (intersection of required-sets, to match union samples);
-    - otherwise prefer the observed schema and fall back to existing for
-      missing keys.
-    """
-    if not existing:
-        return dict(incoming)
-    if existing.get("type") == "object" and incoming.get("type") == "object":
-        merged: dict[str, Any] = dict(existing)
-        merged["type"] = "object"
-        e_props = existing.get("properties") or {}
-        i_props = incoming.get("properties") or {}
-        all_keys = set(e_props.keys()) | set(i_props.keys())
-        merged_props: dict[str, Any] = {}
-        for k in sorted(all_keys):
-            if k in e_props and k in i_props:
-                merged_props[k] = _merge_schemas(e_props[k], i_props[k])
-            else:
-                merged_props[k] = e_props.get(k) or i_props.get(k) or {}
-        merged["properties"] = merged_props
-        e_req = set(existing.get("required") or [])
-        i_req = set(incoming.get("required") or [])
-        if e_req or i_req:
-            inter = sorted(e_req & i_req) if (e_req and i_req) else sorted(e_req | i_req)
-            merged["required"] = inter
-        return merged
-    # Different shapes — keep the incoming schema but preserve existing
-    # metadata keys (e.g. ``description``) that incoming doesn't override.
-    merged = dict(existing)
-    merged.update(incoming)
-    return merged
+# Backwards-compatible alias: callers within this module use ``_merge_schemas``;
+# the canonical implementation lives in ``guardian_core.traffic._merge``.
+_merge_schemas = merge_json_schemas

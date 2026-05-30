@@ -41,6 +41,7 @@ from guardian_core.models import (
     IngestBatch,
     ObservedEndpoint,
 )
+from guardian_core.traffic._merge import merge_json_schemas
 from guardian_core.traffic.defacto import build_defacto_contract
 from guardian_core.traffic.grpc_parser import GrpcCallRecord, parse_grpc_log
 from guardian_core.traffic.har_parser import HarRequestRecord, parse_har_bytes
@@ -226,38 +227,18 @@ def _upsert_observed_endpoint(
     existing.sample_count = int(existing.sample_count or 0) + new_samples
     if _max_timestamp(last_seen_at, existing.last_seen_at) is last_seen_at:
         existing.last_seen_at = last_seen_at
-    if matched and existing.matched_endpoint_id is None:
-        # We don't link to a specific Endpoint row here (those live under a
-        # contract version) — the boolean is captured in the defacto view.
-        pass
+    # Note: ``matched`` is captured per-batch in the defacto materializer;
+    # we deliberately do not link ObservedEndpoint → Endpoint here because
+    # endpoint rows live under a specific contract version and that
+    # binding belongs to the contract-diff milestone.
     db.flush()
     return existing
 
 
-def _merge_schema_dicts(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
-    """Lightweight schema union — same intent as the defacto merger."""
-    if not a:
-        return b
-    if not b:
-        return a
-    if a.get("type") == "object" and b.get("type") == "object":
-        merged: dict[str, Any] = {"type": "object"}
-        ap = a.get("properties") or {}
-        bp = b.get("properties") or {}
-        keys = sorted(set(ap.keys()) | set(bp.keys()))
-        merged_props: dict[str, Any] = {}
-        for k in keys:
-            if k in ap and k in bp:
-                merged_props[k] = _merge_schema_dicts(ap[k], bp[k])
-            else:
-                merged_props[k] = ap.get(k) or bp.get(k) or {}
-        merged["properties"] = merged_props
-        ar = set(a.get("required") or [])
-        br = set(b.get("required") or [])
-        if ar or br:
-            merged["required"] = sorted(ar & br) if (ar and br) else sorted(ar | br)
-        return merged
-    return b
+# Backwards-compatible alias: in-tree call sites and the property-test
+# suite both reference ``_merge_schema_dicts``; the canonical
+# implementation lives in ``guardian_core.traffic._merge``.
+_merge_schema_dicts = merge_json_schemas
 
 
 def _bulk_upsert_field_usages(

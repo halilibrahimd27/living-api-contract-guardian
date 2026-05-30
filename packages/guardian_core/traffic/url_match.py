@@ -17,6 +17,10 @@ from urllib.parse import urlsplit
 from guardian_core.mining.path_normalize import abstract_static_segments
 
 _TEMPLATE_RE = re.compile(r"^\{([^}]+)\}$")
+# Heuristic: a path segment that *looks* like an opaque id when no static
+# OpenAPI template matched. Mirrors the constants in ``path_normalize``
+# (which serves the static-miner side); duplicated here so the two
+# subsystems can evolve independently.
 _UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
