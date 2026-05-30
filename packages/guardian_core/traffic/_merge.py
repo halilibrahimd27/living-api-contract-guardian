@@ -45,12 +45,20 @@ def merge_json_schemas(existing: dict[str, Any] | None, incoming: dict[str, Any]
             else:
                 merged_props[key] = e_props.get(key) or i_props.get(key) or {}
         merged["properties"] = merged_props
-        e_req = set(existing.get("required") or [])
-        i_req = set(incoming.get("required") or [])
-        if e_req or i_req:
-            merged["required"] = (
-                sorted(e_req & i_req) if (e_req and i_req) else sorted(e_req | i_req)
-            )
+        # ``required`` semantics: distinguish "key absent" (no opinion) from
+        # "key present, possibly empty" (explicitly declared). Intersect only
+        # when both sides made an explicit declaration; otherwise keep the
+        # side that did.
+        e_has_required = "required" in existing
+        i_has_required = "required" in incoming
+        if e_has_required and i_has_required:
+            e_req = set(existing.get("required") or [])
+            i_req = set(incoming.get("required") or [])
+            merged["required"] = sorted(e_req & i_req)
+        elif e_has_required:
+            merged["required"] = sorted(set(existing.get("required") or []))
+        elif i_has_required:
+            merged["required"] = sorted(set(incoming.get("required") or []))
         return merged
     # Different shapes: keep ``existing`` metadata, let ``incoming`` win
     # on conflicting keys (most importantly ``type``).
