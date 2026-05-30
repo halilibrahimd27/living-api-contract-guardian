@@ -1,0 +1,24 @@
+{
+  "openapi": "3.0.0",
+  "info": {"title": "Users API", "version": "1.1.0"},
+  "paths": {
+    "/users": {
+      "get": {
+        "summary": "List users",
+        "responses": {"200": {"description": "ok"}}
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "summary": "Fetch a user",
+        "responses": {"200": {"description": "ok"}}
+      }
+    },
+    "/groups": {
+      "get": {
+        "summary": "List groups",
+        "responses": {"200": {"description": "ok"}}
+      }
+    }
+  }
+}
