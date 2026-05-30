@@ -1,0 +1,141 @@
+name: "Guardian API Contract Diff"
+description: >-
+  Run the Living API Contract Guardian diff against a PR's API spec.
+  Posts inline annotations + a Markdown step-summary, and fails the
+  workflow when breaking changes are detected unless the bypass label
+  ('guardian:accept-breaking') is present.
+author: "Living API Contract Guardian"
+
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  base_sha:
+    description: "Base commit SHA (the PR target branch tip)."
+    required: true
+  head_sha:
+    description: "Head commit SHA (the PR head)."
+    required: true
+  spec_path:
+    description: "Path to the OpenAPI spec inside the repo (JSON)."
+    required: true
+  kind:
+    description: "Contract kind: 'openapi' or 'proto'."
+    required: false
+    default: "openapi"
+  accept_breaking:
+    description: >-
+      Set to 'true' (typically when the 'guardian:accept-breaking' label
+      is present on the PR) to suppress the non-zero exit on breaking
+      changes.
+    required: false
+    default: "false"
+  ruleset:
+    description: "Optional path to a custom rules YAML."
+    required: false
+    default: ""
+  python_version:
+    description: "Python version to set up."
+    required: false
+    default: "3.11"
+
+outputs:
+  conclusion:
+    description: "One of 'success', 'failure' — derived from the diff verdict."
+    value: ${{ steps.run-diff.outputs.conclusion }}
+  breaking:
+    description: "Number of breaking changes detected."
+    value: ${{ steps.run-diff.outputs.breaking }}
+  report_path:
+    description: "Filesystem path to the persisted ChangeReport JSON."
+    value: ${{ steps.run-diff.outputs.report_path }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python_version }}
+
+    - name: Install Guardian
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        # When this action is embedded in the Guardian repo itself the
+        # checkout already contains the source; otherwise install from
+        # PyPI (the published name matches the project).
+        if [ -f "${{ github.action_path }}/pyproject.toml" ]; then
+          pip install "${{ github.action_path }}"
+        else
+          pip install living-api-contract-guardian
+        fi
+
+    - name: Materialise base + head specs
+      shell: bash
+      env:
+        BASE_SHA: ${{ inputs.base_sha }}
+        HEAD_SHA: ${{ inputs.head_sha }}
+        SPEC_PATH: ${{ inputs.spec_path }}
+      run: |
+        set -euo pipefail
+        # Make sure both refs are fetched (actions/checkout often does a
+        # shallow clone). Failures are non-fatal: `git show` will tell us.
+        git fetch --no-tags --depth=1 origin "$BASE_SHA" || true
+        git fetch --no-tags --depth=1 origin "$HEAD_SHA" || true
+        mkdir -p "$RUNNER_TEMP/guardian"
+        git show "$BASE_SHA":"$SPEC_PATH" > "$RUNNER_TEMP/guardian/base"
+        git show "$HEAD_SHA":"$SPEC_PATH" > "$RUNNER_TEMP/guardian/head"
+
+    - name: Run guardian diff
+      id: run-diff
+      shell: bash
+      env:
+        ACCEPT_BREAKING: ${{ inputs.accept_breaking }}
+        KIND: ${{ inputs.kind }}
+        RULESET: ${{ inputs.ruleset }}
+      run: |
+        # Fail fast on any unexpected error in the wrapper itself. We
+        # *intentionally* drop -e around the `guardian diff` invocation
+        # below so we can capture its exit code (it returns 2 on
+        # breaking changes) and propagate it verbatim — without retry
+        # loops, without polling, and without sleeping.
+        set -euo pipefail
+        REPORT_JSON="$RUNNER_TEMP/guardian/report.json"
+        SUMMARY_MD="$RUNNER_TEMP/guardian/summary.md"
+        ARGS=(
+          --base "$RUNNER_TEMP/guardian/base"
+          --head "$RUNNER_TEMP/guardian/head"
+          --kind "$KIND"
+          --format github
+          --summary-out "$SUMMARY_MD"
+          --json-out "$REPORT_JSON"
+        )
+        if [ -n "$RULESET" ]; then
+          ARGS+=(--ruleset "$RULESET")
+        fi
+        if [ "${ACCEPT_BREAKING,,}" = "true" ]; then
+          ARGS+=(--accept-breaking)
+        fi
+        # Single-shot invocation: capture the exit code exactly once.
+        set +e
+        guardian diff "${ARGS[@]}"
+        EXIT=$?
+        set -e
+        if [ -f "$SUMMARY_MD" ]; then
+          cat "$SUMMARY_MD" >> "$GITHUB_STEP_SUMMARY"
+        fi
+        if [ -f "$REPORT_JSON" ]; then
+          BREAKING=$(python -c "import json,sys; print(json.load(open(sys.argv[1]))['summary']['breaking'])" "$REPORT_JSON")
+        else
+          BREAKING=0
+        fi
+        echo "report_path=$REPORT_JSON" >> "$GITHUB_OUTPUT"
+        echo "breaking=$BREAKING" >> "$GITHUB_OUTPUT"
+        if [ "$EXIT" -eq 0 ]; then
+          echo "conclusion=success" >> "$GITHUB_OUTPUT"
+        else
+          echo "conclusion=failure" >> "$GITHUB_OUTPUT"
+        fi
+        exit "$EXIT"

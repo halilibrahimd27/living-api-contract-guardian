@@ -1,0 +1,24 @@
+{
+  "name": "guardian-github-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Probot 13.x app that posts Guardian ChangeReport check runs + PR comments.",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "probot run ./src/index.js",
+    "receive": "probot receive -e pull_request -p test/fixtures/pull_request.opened.json ./src/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "probot": "^13.3.6",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@octokit/fixtures": "^22.5.0",
+    "nock": "^13.5.4"
+  }
+}

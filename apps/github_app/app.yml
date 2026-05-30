@@ -1,0 +1,23 @@
+# Probot manifest — used by `probot run` to register a GitHub App.
+# The Probot CLI reads this when the user visits /probot to install
+# the App on a test org. See https://probot.github.io/docs/deployment/
+
+default_events:
+  - pull_request
+  - pull_request_review
+  - check_run
+  - check_suite
+
+default_permissions:
+  checks: write
+  contents: read
+  issues: write
+  metadata: read
+  pull_requests: write
+
+name: guardian-api-contract-guardian
+description: >-
+  Living API Contract Guardian — posts a ChangeReport check run +
+  per-client impact comment on every PR that touches an API spec.
+url: https://github.com/your-org/living-api-contract-guardian
+public: false
