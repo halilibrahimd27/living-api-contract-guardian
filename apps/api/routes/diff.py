@@ -6,6 +6,7 @@ import base64
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from guardian_core.logging import get_logger
+from guardian_core.models import ContractDiff
 from guardian_core.schemas import DiffRequest
 from guardian_diff import ChangeReport, RuleSet, diff_contracts, load_default_rules
 from guardian_diff.ruleset import load_rules_from_text
@@ -86,9 +87,23 @@ def diff(
                 detail=f"failed to parse FileDescriptorSet: {exc}",
             ) from exc
 
+    # Persist the report so per-client migration guides can be retrieved
+    # later via GET /guides/{diff_id}/{client_id}. The persisted row's
+    # id is stamped onto the response so the caller never has to make a
+    # second round-trip to learn it.
+    row = ContractDiff(
+        contract_kind=report.contract_kind,
+        report_json=report.model_dump(mode="json"),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    report = report.model_copy(update={"diff_id": row.id})
+
     log.info(
         "diff.computed",
         kind=payload.kind,
+        diff_id=row.id,
         total=report.summary.total,
         breaking=report.summary.breaking,
         behavioral=report.summary.behavioral,

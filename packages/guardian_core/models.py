@@ -20,6 +20,7 @@ from sqlalchemy import (
     Integer,
     LargeBinary,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -419,6 +420,63 @@ class CiRun(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
     )
+
+
+class ContractDiff(Base):
+    """A persisted :class:`ChangeReport` produced by ``POST /diff``.
+
+    Stores the full classified diff payload so per-client migration
+    guides can be regenerated (or fetched from cache) later via
+    ``GET /guides/{diff_id}/{client_id}``. ``contract_kind`` mirrors
+    the ChangeReport field so the guide service can pick language hints
+    without re-parsing the embedded report.
+    """
+
+    __tablename__ = "contract_diffs"
+    __table_args__ = (Index("ix_contract_diffs_created", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    contract_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    report_json: Mapped[dict[str, Any]] = mapped_column(JsonDict, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
+    )
+
+    guides: Mapped[list[Guide]] = relationship(
+        "Guide", back_populates="contract_diff", cascade="all, delete-orphan"
+    )
+
+
+class Guide(Base):
+    """A cached LLM-drafted per-client migration guide.
+
+    Rows are uniquely keyed by ``prompt_hash`` — the SHA-256 over
+    ``(diff_id, client_id, prompt_version, model)`` — which encodes the
+    reproducibility contract: changing any one of those four inputs
+    produces a new row, while a cache hit short-circuits the LLM call.
+    """
+
+    __tablename__ = "guides"
+    __table_args__ = (
+        UniqueConstraint("prompt_hash", name="uq_guides_prompt_hash"),
+        Index("ix_guides_diff_client", "diff_id", "client_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    diff_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("contract_diffs.id", ondelete="CASCADE"), nullable=False
+    )
+    client_id: Mapped[str] = mapped_column(String(512), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    model: Mapped[str] = mapped_column(String(128), nullable=False)
+    prompt_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    markdown: Mapped[str] = mapped_column(Text(), nullable=False)
+    retries: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
+    )
+
+    contract_diff: Mapped[ContractDiff] = relationship("ContractDiff", back_populates="guides")
 
 
 class Deprecation(Base):

@@ -28,6 +28,8 @@ dependencies = [
   "ijson>=3.2,<4",
   "python-multipart>=0.0.9",
   "protobuf>=4.25,<7",
+  "litellm>=1.40",
+  "jinja2>=3.1",
 ]
 
 [project.optional-dependencies]
@@ -57,15 +59,19 @@ packages = [
   "guardian_core.traffic",
   "guardian_diff",
   "guardian_diff.rules",
+  "guardian_guides",
+  "guardian_guides.prompts",
 ]
 
 [tool.setuptools.package-data]
 "guardian_diff.rules" = ["*.yml"]
+"guardian_guides.prompts" = ["*.jinja"]
 
 [tool.setuptools.package-dir]
 "apps" = "apps"
 "guardian_core" = "packages/guardian_core"
 "guardian_diff" = "packages/guardian_diff"
+"guardian_guides" = "packages/guardian_guides"
 
 [tool.ruff]
 line-length = 100
@@ -113,6 +119,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["google.protobuf.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["litellm", "litellm.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

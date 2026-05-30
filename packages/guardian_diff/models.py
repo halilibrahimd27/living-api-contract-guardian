@@ -94,3 +94,13 @@ class ChangeReport(BaseModel):
     summary: ChangeReportSummary = Field(default_factory=ChangeReportSummary)
     spectral_findings: list[SpectralFinding] = Field(default_factory=list)
     ruleset_id: str = "default"
+    diff_id: str | None = Field(
+        default=None,
+        description=(
+            "Persisted ``contract_diffs.id`` for this report. Populated by"
+            " POST /diff so callers can hand the id off to"
+            " GET /guides/{diff_id}/{client_id}. Unset for reports built"
+            " purely in-process (e.g. CLI invocations of"
+            " ``guardian_diff.diff_contracts``)."
+        ),
+    )

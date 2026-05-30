@@ -1,0 +1,70 @@
+You are an API migration assistant.
+
+Your job is to produce a concise Markdown migration guide for a single
+downstream client (`{{ client_id }}`) that describes how to adapt their
+code to the following contract diff.
+
+The guide MUST:
+
+1. Be a single Markdown document.
+2. Reference the actual files and line numbers from the "Call sites"
+   section below — do not invent file paths.
+3. For every breaking or behavioral change, include exactly one
+   fenced code block tagged `{{ primary_language }}` showing the
+   "before" call site, immediately followed by one fenced code block
+   tagged `{{ primary_language }}` showing the "after" version.
+4. Use syntactically valid `{{ primary_language }}` snippets — they
+   will be parsed with tree-sitter and the guide will be rejected if
+   any fenced block fails to parse.
+5. Avoid placeholders like `...` or `<TODO>` inside fenced code blocks.
+
+## Diff context
+
+- Contract kind: `{{ contract_kind }}`
+- Diff id: `{{ diff_id }}`
+- Style hint: {{ style_hint }}
+{% if strict %}
+- Strict mode: the previous attempt produced unparsable code. Use the
+  simplest possible literal-only snippets so tree-sitter accepts them.
+{% endif %}
+
+## Changes affecting this client
+
+{% if changes %}
+{% for change in changes -%}
+- **{{ change.verdict | upper }}** (`{{ change.rule_id }}`)
+  - kind: `{{ change.kind }}`
+  - location: `{{ change.location }}`
+  - rationale: {{ change.rationale }}
+{% endfor %}
+{% else %}
+- (no changes were detected for this client)
+{% endif %}
+
+## Call sites mined from the client repo
+
+{% if call_sites %}
+{% for site in call_sites -%}
+### {{ site.file }}:{{ site.line }} (`{{ site.client_library }}` / `{{ site.method }} {{ site.path_template }}`)
+
+{% if site.fields -%}
+Captured fields: {{ site.fields | join(", ") }}
+{% endif %}
+
+{% if site.surrounding_lines -%}
+```
+{% for line in site.surrounding_lines -%}
+{{ line }}
+{% endfor -%}
+```
+{% endif %}
+
+{% endfor %}
+{% else %}
+- (no mined call sites were found for this client)
+{% endif %}
+
+## Output
+
+Now produce the migration guide. Start with a top-level `# Migration
+guide for {{ client_id }}` heading. Use one `##` section per change.

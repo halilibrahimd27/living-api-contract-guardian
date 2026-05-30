@@ -107,6 +107,27 @@ def test_ci_runs_table(inspector: Inspector) -> None:
     assert "uq_ci_runs_repo_pr_sha" in uniques
 
 
+def test_guides_tables(inspector: Inspector) -> None:
+    tables = set(inspector.get_table_names())
+    assert {"contract_diffs", "guides"}.issubset(tables)
+    cd_cols = {c["name"] for c in inspector.get_columns("contract_diffs")}
+    assert {"id", "contract_kind", "report_json", "created_at"}.issubset(cd_cols)
+    g_cols = {c["name"] for c in inspector.get_columns("guides")}
+    assert {
+        "id",
+        "diff_id",
+        "client_id",
+        "prompt_version",
+        "model",
+        "prompt_hash",
+        "markdown",
+        "retries",
+        "created_at",
+    }.issubset(g_cols)
+    g_uniques = {u["name"] for u in inspector.get_unique_constraints("guides")}
+    assert "uq_guides_prompt_hash" in g_uniques
+
+
 def test_unique_constraints(inspector: Inspector) -> None:
     uniques = {u["name"] for u in inspector.get_unique_constraints("contract_versions")}
     assert "uq_versions_service_hash" in uniques
