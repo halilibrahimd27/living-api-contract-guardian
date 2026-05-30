@@ -285,10 +285,19 @@ The Probot App (under `apps/github_app/`) subscribes to PR webhooks,
 posts a Checks API check run + a PR comment with the same Markdown
 body (including the per-client impact table), and upserts the result
 to `POST /ci/runs` so the run is keyed by `(repo, pr_number,
-head_sha)` in `ci_runs`. Webhook payloads are HMAC-verified by
-`@octokit/webhooks` before any handler runs. See
-[`apps/github_app/README.md`](apps/github_app/README.md) for the
-installation and offline-replay workflow.
+head_sha)` in `ci_runs`. The check run carries one **Checks API
+annotation per change** (anchored on the spec file, `failure` /
+`warning` / `notice` matched to verdict) so each delta surfaces inline
+on the PR's *Files Changed* view, with the structural pointer plus
+`rule_id` + `rationale`. Webhook payloads are HMAC-verified by
+`@octokit/webhooks` before any handler runs. The App ships an
+offline test suite (`node --test apps/github_app/test/*.test.js`)
+that replays canned `pull_request.opened` / `pull_request.labeled`
+fixtures through `handlePullRequest` with a stubbed octokit + injected
+`runDiff`/`postRun`, asserting the resulting check run, annotations,
+comment body, and backend POST — no Python, no GitHub, no network.
+See [`apps/github_app/README.md`](apps/github_app/README.md) for the
+installation and full replay workflow.
 
 ## Docker
 

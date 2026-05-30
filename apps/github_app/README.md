@@ -6,9 +6,16 @@ posts:
 
 - A **Check Run** named "Guardian / API Contract Diff" via the Checks
   API, with `conclusion = failure` when breaking changes are present and
-  the `guardian:accept-breaking` label is **not** set on the PR.
+  the `guardian:accept-breaking` label is **not** set on the PR. The
+  check carries one **annotation per change** (capped at 50, the Checks
+  API limit), anchored on the spec file at line 1 — `failure` for
+  breaking, `warning` for behavioral, `notice` for additive — so each
+  change shows up inline on the PR's *Files Changed* view with the
+  structural pointer (`paths./users`), `rule_id`, and `rationale`.
 - A **PR comment** with the same Markdown body — including a
-  per-client impact table.
+  per-client impact table (one row per downstream client repo whose
+  mined `InferredEndpoint` calls land on a changed location, with a
+  count of affected changes and a breaking/non-breaking flag).
 
 The diff itself is computed by the Python `guardian` CLI (the App shells
 out to it), keeping a single rule engine across the Action and the App.
@@ -39,8 +46,30 @@ APP_ID=... PRIVATE_KEY=... WEBHOOK_SECRET=... npm start
 
 ## Offline test (no real GitHub)
 
+There are two complementary offline test paths:
+
+**1. `node --test` (default, no `npm install` needed).** The App exports
+`handlePullRequest` plus a small dependency-injection seam so the
+suite under `test/index.test.js` can replay the canned webhook
+payloads from `test/fixtures/` against a stubbed octokit + stubbed
+`runDiff`/`postRun`. The suite asserts the resulting `checks.create`,
+`checks.update` (including the annotations array + conclusion), PR
+comment body (per-client impact summary), and the backend
+`POST /ci/runs` body — all without spawning Python, hitting GitHub, or
+sleeping.
+
+```bash
+cd apps/github_app
+node --test test/*.test.js
+```
+
+This is also what GitHub Actions runs as the `GitHub App offline tests`
+step in `.github/workflows/ci.yml`.
+
+**2. `probot receive` replay (requires `npm install`).**
 `@octokit/fixtures` ships canned webhook payloads. Replay one through
-`probot receive`:
+`probot receive` for a full end-to-end smoke against a stubbed GitHub
+recorded with `nock`:
 
 ```bash
 # Plays a pull_request.opened payload through the App handlers; the
