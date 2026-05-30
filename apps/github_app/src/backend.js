@@ -1,9 +1,10 @@
 // @ts-check
 /**
  * Thin client for the Guardian FastAPI backend.
+ *
+ * Uses Node 20's built-in global ``fetch`` so the App image and the
+ * test harness have zero runtime dependencies for this call.
  */
-
-import fetch from "node-fetch";
 
 /**
  * Persist a CI run via `POST /ci/runs` on the Guardian backend.
@@ -19,6 +20,7 @@ import fetch from "node-fetch";
  *   bypass_label_present: boolean;
  *   check_run_id?: number;
  * }} payload
+ * @returns {Promise<Record<string, unknown>>}
  */
 export async function postRun(baseUrl, payload) {
   const res = await fetch(`${baseUrl.replace(/\/$/, "")}/ci/runs`, {

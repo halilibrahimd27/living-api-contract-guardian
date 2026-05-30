@@ -14,8 +14,7 @@
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
-    "probot": "^13.3.6",
-    "node-fetch": "^3.3.2"
+    "probot": "^13.3.6"
   },
   "devDependencies": {
     "@octokit/fixtures": "^22.5.0",
