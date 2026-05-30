@@ -10,6 +10,7 @@ from guardian_core.schemas import HealthResponse
 from guardian_core.version import get_git_sha, get_version
 from sqlalchemy import text
 
+from apps.api.routes.diff import router as diff_router
 from apps.api.routes.ingest import router as ingest_router
 from apps.api.routes.services import router as services_router
 
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Living API Contract Guardian", version=version)
     app.include_router(services_router)
     app.include_router(ingest_router)
+    app.include_router(diff_router)
 
     log = get_logger("api")
 

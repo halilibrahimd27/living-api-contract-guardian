@@ -118,3 +118,41 @@ class DefactoContractRead(BaseModel):
     observed_endpoint_count: int
     contract_json: dict[str, Any]
     materialized_at: datetime
+
+
+class DiffRequest(BaseModel):
+    """Payload for ``POST /diff``.
+
+    Diff two contract versions and classify each change. ``kind`` selects
+    the diff walker; ``before`` / ``after`` must match its expectations:
+
+    * ``openapi`` — ``before_spec`` / ``after_spec`` must be JSON objects.
+    * ``proto``   — ``before_b64`` / ``after_b64`` must be base64-encoded
+      ``FileDescriptorSet`` blobs.
+
+    A custom ruleset can be supplied as raw YAML in ``rules_yaml``; it
+    merges over the default ruleset (rule-id-keyed last-write-wins).
+    ``run_spectral`` is honored only for OpenAPI inputs and is a no-op
+    when no Spectral binary is vendored.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: ContractKind
+    before_spec: dict[str, Any] | None = None
+    after_spec: dict[str, Any] | None = None
+    before_b64: str | None = None
+    after_b64: str | None = None
+    rules_yaml: str | None = None
+    run_spectral: bool = False
+
+    @field_validator("before_b64", "after_b64")
+    @classmethod
+    def _validate_b64(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        try:
+            base64.b64decode(v, validate=True)
+        except Exception as exc:  # pragma: no cover - pydantic surface
+            raise ValueError("must be valid base64") from exc
+        return v
