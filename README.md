@@ -17,9 +17,10 @@ is a data question, not an archaeology project.
 > Status: early build. The data model, service registry, contract
 > ingestion (hashing + canonicalisation), health surface, CLI,
 > migrations, the **static client AST miner** (Python + JS/TS + gRPC),
-> and the **traffic-replay contract augmentor** (HAR + gRPC log → merged
-> "de-facto contract") are in place; endpoint-diffing and
-> usage-analytics endpoints land in later milestones.
+> the **traffic-replay contract augmentor** (HAR + gRPC log → merged
+> "de-facto contract"), and the **evolution rule engine** (additive /
+> behavioral / breaking classification for OpenAPI + protobuf) are in
+> place; usage-analytics endpoints land in later milestones.
 
 ## Why this is useful
 
@@ -74,6 +75,15 @@ packages/
       ingestor.py          orchestrator + idempotent ON CONFLICT upserts
       defacto.py           static spec ⊕ observed → merged contract
       _merge.py            shared JSON-schema union helper
+  guardian_diff/   contract evolution rule engine
+    models.py      RawChange / ChangeRecord / ChangeReport pydantic v2
+    openapi.py     OpenAPI 3.x raw-change walker
+    proto.py       protobuf FileDescriptorSet walker
+    ruleset.py     YAML rule loader + per-rule classify()
+    rules/default.yml  shipped additive / behavioral / breaking ruleset
+    clients.py     join changes against InferredEndpoint catalogue
+    spectral.py    optional Spectral CLI integration (vendored)
+    engine.py      diff_contracts() — walk + classify + summarize
     ...
 alembic/        schema migrations
 fixtures/       sample client repos + labels.yaml (recall corpus)
@@ -92,6 +102,12 @@ Data model (one line each):
 | `Usage`          | A client's calls to an endpoint over a time window.           |
 | `Deprecation`    | A planned/active deprecation of an endpoint.                  |
 | `InferredEndpoint` | A call site mined from a client repo at a given commit SHA. |
+
+`ChangeReport` (returned by `POST /diff`, not persisted) is a transient
+pydantic-v2 payload: `{contract_kind, changes[ChangeRecord], summary,
+spectral_findings, ruleset_id}`, where each
+`ChangeRecord = {change_id, kind, location, verdict, rule_id, rationale,
+affected_clients[], before, after, detail}`.
 
 ## Stack
 
@@ -159,6 +175,7 @@ A small fixture corpus under `fixtures/clients/` plus
 | POST   | `/services/{id}/contracts`   | Upload a contract version (hashed + deduped) |
 | POST   | `/ingest/traffic`            | Ingest HAR + gRPC log → de-facto contract id |
 | GET    | `/ingest/defacto/{id}`       | Fetch a materialized de-facto contract |
+| POST   | `/diff`                      | Diff two contract versions → classified ChangeReport |
 
 The traffic endpoint accepts a multipart form with `service_id`
 (required), an optional `client_id`, and at least one of `har` (an HTTP
@@ -177,6 +194,44 @@ curl -sS -X POST http://127.0.0.1:8000/ingest/traffic \
 
 (Client-mined endpoints are not yet exposed over HTTP; consume them via
 the database, or follow up with `guardian mine` in CI.)
+
+### Evolution rule engine (`POST /diff`)
+
+Submit two contract versions and the Guardian returns a structured
+`ChangeReport` — one `ChangeRecord` per atomic delta, each tagged with a
+`verdict` in `{additive, behavioral, breaking}`, the matching `rule_id`,
+a human-readable `rationale`, and the list of client repos
+(`affected_clients`) whose mined call sites land on the changed
+location.
+
+* **OpenAPI** changes are walked structurally (paths / operations /
+  parameters / request body / responses / enums / `components.schemas`).
+  When a Spectral CLI is vendored under `vendor/bin/spectral` and the
+  request opts in with `run_spectral: true`, lint findings are attached
+  to the report as `spectral_findings`.
+* **Protobuf** changes are computed from two
+  `FileDescriptorSet` blobs (produced by `protoc --descriptor_set_out`).
+  Field number / type / label transitions and RPC signature changes are
+  canonical wire-format breaks.
+* The default ruleset ships at `packages/guardian_diff/rules/default.yml`.
+  Callers may override any rule by id by passing custom YAML in
+  `rules_yaml`; overrides merge last-write-wins by `id`, with optional
+  glob scoping by location.
+
+```bash
+curl -sS -X POST http://127.0.0.1:8000/diff \
+  -H 'content-type: application/json' \
+  -d '{
+        "kind": "openapi",
+        "before_spec": {"openapi":"3.0.0","info":{"title":"x","version":"1"},
+                        "paths":{"/users":{"get":{"responses":{"200":{"description":"ok"}}}}}},
+        "after_spec":  {"openapi":"3.0.0","info":{"title":"x","version":"1"},
+                        "paths":{}}
+      }'
+# → {"contract_kind":"openapi","changes":[{"change_id":"...",
+#     "kind":"openapi.path.removed","verdict":"breaking",
+#     "rule_id":"OAS-PATH-REMOVED", ...}], ...}
+```
 
 ## Docker
 
