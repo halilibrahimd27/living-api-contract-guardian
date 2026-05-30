@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from guardian_diff.models import RawChange, Verdict
 from guardian_diff.ruleset import Rule, RuleSet, load_default_rules, load_rules_from_text
-from hypothesis import given
+from hypothesis import assume, given
 from hypothesis import strategies as st
 
 
@@ -88,8 +88,7 @@ class TestRuleMatching:
     @given(_rule_strategy())
     def test_rule_matches_same_kind_no_glob(self, rule: Rule) -> None:
         """A rule with no location_glob matches any change with matching kind."""
-        if rule.location_glob is not None:
-            st.assume(False)
+        assume(rule.location_glob is None)
         change = RawChange(kind=rule.kind, location="/test/path")
         assert rule.matches(change)
 
@@ -143,17 +142,20 @@ class TestRuleSetClassify:
 
     @given(st.lists(_rule_strategy(), min_size=1, max_size=20, unique_by=lambda r: r.id))
     def test_classify_returns_matching_rule_verdict(self, rules: list[Rule]) -> None:
-        """classify() returns verdict matching the matched rule."""
+        """classify() returns verdict matching the last matched rule."""
         if not rules:
             return
         ruleset = RuleSet(id="test", rules=rules)
         rule = rules[0]
         change = RawChange(kind=rule.kind, location="/test")
         verdict, rule_id, _ = ruleset.classify(change)
-        # Should match rule if it matches
-        if rule.matches(change):
-            assert verdict == rule.verdict
-            assert rule_id == rule.id
+        # RuleSet.classify walks all rules and returns the *last* match
+        # (so overrides win); pick the last matching rule for comparison.
+        matching = [r for r in rules if r.matches(change)]
+        if matching:
+            expected = matching[-1]
+            assert verdict == expected.verdict
+            assert rule_id == expected.id
 
     @given(st.lists(_rule_strategy(), min_size=0, max_size=20, unique_by=lambda r: r.id))
     def test_classify_always_returns_valid_verdict(self, rules: list[Rule]) -> None:

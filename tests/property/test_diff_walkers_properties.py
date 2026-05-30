@@ -17,7 +17,7 @@ from typing import Any
 from google.protobuf.descriptor_pb2 import FileDescriptorSet
 from guardian_diff.openapi import diff_openapi
 from guardian_diff.proto import diff_proto
-from hypothesis import assume, given
+from hypothesis import given
 from hypothesis import strategies as st
 
 
@@ -104,10 +104,13 @@ class TestDiffOpenAPIIdentical:
         changes = diff_openapi(spec, spec)
         assert len(changes) == 0
 
-    @given(st.text(min_size=1, max_size=50, alphabet="/abcdefghijklmnopqrstuvwxyz0123456789_-"))
+    @given(
+        st.text(min_size=0, max_size=50, alphabet="/abcdefghijklmnopqrstuvwxyz0123456789_-").map(
+            lambda s: "/" + s
+        )
+    )
     def test_identical_specs_with_path_no_changes(self, path: str) -> None:
         """Diffing identical specs with same paths produces no changes."""
-        assume("/" in path or path.startswith("/"))
         spec = _openapi_spec_with_path(path)
         changes = diff_openapi(spec, spec)
         assert len(changes) == 0

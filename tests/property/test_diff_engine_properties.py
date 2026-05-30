@@ -51,9 +51,9 @@ def _raw_change_strategy() -> st.SearchStrategy[RawChange]:
         alphabet=st.characters(
             blacklist_categories=("Cc", "Cs"), min_codepoint=32, max_codepoint=126
         ),
-        min_size=1,
+        min_size=0,
         max_size=200,
-    ).filter(lambda s: "/" in s or s.startswith("/"))
+    ).map(lambda s: "/" + s)
 
     values = st.one_of(st.none(), st.booleans(), st.integers(), st.text(max_size=100))
     details = st.dictionaries(
@@ -223,9 +223,6 @@ class TestDiffContractsOpenAPI:
 
     def test_diff_contracts_openapi_rejects_non_dict_before(self) -> None:
         """diff_contracts raises TypeError when before is not dict for OpenAPI."""
-        with st.assume(False):
-            pass
-        # Directly test type validation
         import pytest
 
         with pytest.raises(TypeError):
