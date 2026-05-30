@@ -99,8 +99,11 @@ def parse_har_bytes(raw: bytes) -> list[HarRequestRecord]:
 
     Bytes are passed to ``haralyzer.HarParser`` which validates structure;
     we then walk the entries and decode JSON bodies one at a time so a
-    single oversized response cannot blow up the whole import.
+    single oversized response cannot blow up the whole import. An empty
+    byte string returns an empty list (no records) rather than raising.
     """
+    if not raw:
+        return []
     try:
         data = json.loads(raw.decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
