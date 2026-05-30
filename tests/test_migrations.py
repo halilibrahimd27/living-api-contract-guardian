@@ -87,6 +87,26 @@ def test_deprecations_columns(inspector: Inspector) -> None:
     }.issubset(cols)
 
 
+def test_ci_runs_table(inspector: Inspector) -> None:
+    tables = set(inspector.get_table_names())
+    assert "ci_runs" in tables
+    cols = {c["name"] for c in inspector.get_columns("ci_runs")}
+    assert {
+        "id",
+        "repo",
+        "pr_number",
+        "head_sha",
+        "base_sha",
+        "conclusion",
+        "report_json",
+        "bypass_label_present",
+        "check_run_id",
+        "created_at",
+    }.issubset(cols)
+    uniques = {u["name"] for u in inspector.get_unique_constraints("ci_runs")}
+    assert "uq_ci_runs_repo_pr_sha" in uniques
+
+
 def test_unique_constraints(inspector: Inspector) -> None:
     uniques = {u["name"] for u in inspector.get_unique_constraints("contract_versions")}
     assert "uq_versions_service_hash" in uniques

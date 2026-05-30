@@ -13,6 +13,7 @@ from typing import Any
 import uuid_utils
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -372,6 +373,49 @@ class DefactoContract(Base):
     materialized_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
     )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
+    )
+
+
+class CiRun(Base):
+    """A persisted GitHub PR check produced by the Guardian CI integration.
+
+    The Probot app + composite Action upload one row per PR head SHA.
+    ``conclusion`` is the GitHub Checks API conclusion string
+    (``success``, ``failure``, ``neutral``, ``action_required``, ...);
+    ``report_json`` carries the full :class:`ChangeReport` payload so
+    later runs (or a follow-up PR comment refresh) can reconstruct the
+    per-client impact view without re-diffing. ``bypass_label_present``
+    records whether ``guardian:accept-breaking`` was on the PR when the
+    check ran. The ``(repo, pr_number, head_sha)`` uniqueness lets the
+    integration upsert idempotently when a push amends the head SHA.
+    """
+
+    __tablename__ = "ci_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "repo",
+            "pr_number",
+            "head_sha",
+            name="uq_ci_runs_repo_pr_sha",
+        ),
+        Index("ix_ci_runs_repo_pr", "repo", "pr_number"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    repo: Mapped[str] = mapped_column(String(255), nullable=False)
+    pr_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    head_sha: Mapped[str] = mapped_column(String(64), nullable=False)
+    base_sha: Mapped[str] = mapped_column(String(64), nullable=False)
+    conclusion: Mapped[str] = mapped_column(String(32), nullable=False)
+    report_json: Mapped[dict[str, Any]] = mapped_column(JsonDict, nullable=False, default=dict)
+    bypass_label_present: Mapped[bool] = mapped_column(
+        Boolean(),
+        nullable=False,
+        default=False,
+    )
+    check_run_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
     )

@@ -120,6 +120,54 @@ class DefactoContractRead(BaseModel):
     materialized_at: datetime
 
 
+CiConclusion = Literal[
+    "success",
+    "failure",
+    "neutral",
+    "action_required",
+    "cancelled",
+    "timed_out",
+    "skipped",
+]
+
+
+class CiRunCreate(BaseModel):
+    """Payload for ``POST /ci/runs``.
+
+    Mirrors the row the Probot app upserts after each PR check. ``repo``
+    is the ``owner/name`` slug, ``pr_number`` and ``head_sha`` form the
+    natural key. ``report_json`` carries the full ChangeReport JSON.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    repo: Annotated[str, Field(min_length=1, max_length=255, pattern=r"^[^/\s]+/[^/\s]+$")]
+    pr_number: Annotated[int, Field(ge=1)]
+    head_sha: Annotated[str, Field(min_length=7, max_length=64, pattern=r"^[0-9a-fA-F]+$")]
+    base_sha: Annotated[str, Field(min_length=7, max_length=64, pattern=r"^[0-9a-fA-F]+$")]
+    conclusion: CiConclusion
+    report_json: dict[str, Any] = Field(default_factory=dict)
+    bypass_label_present: bool = False
+    check_run_id: int | None = None
+
+
+class CiRunRead(BaseModel):
+    """A persisted ``ci_runs`` row returned to API callers."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    repo: str
+    pr_number: int
+    head_sha: str
+    base_sha: str
+    conclusion: CiConclusion
+    report_json: dict[str, Any]
+    bypass_label_present: bool
+    check_run_id: int | None
+    created_at: datetime
+
+
 class DiffRequest(BaseModel):
     """Payload for ``POST /diff``.
 
