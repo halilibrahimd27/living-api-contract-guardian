@@ -85,7 +85,7 @@ plugins = ["pydantic.mypy"]
 mypy_path = "packages"
 explicit_package_bases = true
 namespace_packages = true
-exclude = "(^vendor/|^\\.venv/|^fixtures/)"
+exclude = "(^vendor/|^\\.venv/|^fixtures/.+/)"
 
 [[tool.mypy.overrides]]
 module = ["alembic.*"]
