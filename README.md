@@ -16,9 +16,10 @@ is a data question, not an archaeology project.
 
 > Status: early build. The data model, service registry, contract
 > ingestion (hashing + canonicalisation), health surface, CLI,
-> migrations, and the **static client AST miner** (Python + JS/TS +
-> gRPC) are in place; endpoint-diffing and usage-analytics endpoints
-> land in later milestones.
+> migrations, the **static client AST miner** (Python + JS/TS + gRPC),
+> and the **traffic-replay contract augmentor** (HAR + gRPC log → merged
+> "de-facto contract") are in place; endpoint-diffing and
+> usage-analytics endpoints land in later milestones.
 
 ## Why this is useful
 
@@ -39,6 +40,14 @@ HTTP/gRPC contract space is underserved. The Guardian gives you:
   OpenAPI-style path template, query/body field names, gRPC stub
   invocations) by walking the AST. No runtime instrumentation, no
   network traffic — just `tree-sitter` over the source.
+- **Traffic-replay augmentation** — `POST /ingest/traffic` accepts a
+  HAR (HTTP Archive) and/or a JSON-lines gRPC call log, infers JSON
+  Schemas for each observed request/response (genson + enum + oneOf
+  post-processing), matches URLs to known OpenAPI templates (with a
+  numeric/UUID heuristic fallback), and stores per-field counts +
+  `last_seen_at` for usage-decay tracking. The result is a materialized
+  **de-facto contract** — the union of the static spec and what
+  production actually does.
 
 ## Architecture
 
@@ -57,6 +66,13 @@ packages/
       js_visitor.py      fetch / axios call sites (JS + TS)
       path_normalize.py  URL -> OpenAPI {param} templates
       repo_scanner.py    walk a repo, persist findings
+    traffic/    HAR + gRPC log ingestion → de-facto contract
+      har_parser.py        haralyzer + ijson HAR streamer
+      grpc_parser.py       JSONL gRPC call log parser
+      schema_inference.py  genson + enum + anyOf post-processing
+      url_match.py         OpenAPI route-tree match w/ heuristic fallback
+      ingestor.py          orchestrator + idempotent ON CONFLICT upserts
+      defacto.py           static spec ⊕ observed → merged contract
     ...
 alembic/        schema migrations
 fixtures/       sample client repos + labels.yaml (recall corpus)
@@ -140,6 +156,23 @@ A small fixture corpus under `fixtures/clients/` plus
 | POST   | `/services`                  | Register a service                   |
 | GET    | `/services/{id}`             | Fetch a service                      |
 | POST   | `/services/{id}/contracts`   | Upload a contract version (hashed + deduped) |
+| POST   | `/ingest/traffic`            | Ingest HAR + gRPC log → de-facto contract id |
+| GET    | `/ingest/defacto/{id}`       | Fetch a materialized de-facto contract |
+
+The traffic endpoint accepts a multipart form with `service_id`
+(required), an optional `client_id`, and at least one of `har` (an HTTP
+Archive file) or `grpc_log` (a JSON-lines gRPC call log). It returns
+the new `defacto_contract` row's id plus a per-batch summary; re-posting
+the exact same payload is idempotent (the response carries
+`is_duplicate_batch: true` and field-usage counts do not double).
+
+```bash
+curl -sS -X POST http://127.0.0.1:8000/ingest/traffic \
+  -F "service_id=$SVC" \
+  -F "client_id=billing-worker" \
+  -F "har=@fixtures/traffic/sample.har;type=application/json" \
+  -F "grpc_log=@fixtures/traffic/sample.grpc.jsonl;type=application/jsonl"
+```
 
 (Client-mined endpoints are not yet exposed over HTTP; consume them via
 the database, or follow up with `guardian mine` in CI.)

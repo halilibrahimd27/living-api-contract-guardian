@@ -88,3 +88,33 @@ class ContractRead(BaseModel):
     created: bool = Field(
         description="True if a new version was created; False if existing version was returned."
     )
+
+
+class TrafficIngestResponse(BaseModel):
+    """Result returned by ``POST /ingest/traffic``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    contract_id: str = Field(description="ID of the materialized de-facto contract row.")
+    batch_id: str
+    batch_hash: str
+    service_id: str
+    record_count: int
+    observed_endpoint_count: int
+    field_usage_row_count: int
+    matched_endpoint_count: int
+    is_duplicate_batch: bool
+
+
+class DefactoContractRead(BaseModel):
+    """A materialized de-facto contract returned by ``GET /defacto/{id}``."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    service_id: str
+    ingest_batch_id: str
+    endpoint_count: int
+    observed_endpoint_count: int
+    contract_json: dict[str, Any]
+    materialized_at: datetime
