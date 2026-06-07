@@ -384,6 +384,41 @@ How it works:
   client, up to N mined call sites with surrounding source lines, and a
   language-specific style hint.
 
+## Dashboard (Next.js)
+
+A read-only Next.js 14 App Router dashboard lives under `apps/dashboard/`.
+It surfaces:
+
+| Page | Route | Notes |
+|------|-------|-------|
+| Services list | `/` | RSC — lists all registered services |
+| Service detail | `/services/[id]` | RSC — shows contract versions |
+| Diff report | `/diff/[id]` | RSC — change list + per-client impact matrix |
+| Campaigns list | `/campaigns` | RSC — state badge + key metrics |
+| Campaign detail | `/campaigns/[id]` | Client component — polls every 10 s, decay chart |
+
+### Running the dashboard locally
+
+```bash
+cd apps/dashboard
+npm install
+NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
+# → http://localhost:3000
+```
+
+### Running the full E2E stack
+
+```bash
+# Bring up postgres + redis + api + dashboard
+docker compose -f infra/docker-compose.e2e.yml up --build -d
+
+# Run E2E tests (requires the stack to be healthy)
+pytest tests/e2e/ -m e2e -v
+```
+
+E2E tests seed fixtures directly against the live API (no Playwright), then
+verify dashboard pages return HTTP 200s.
+
 ## Docker
 
 ```bash
