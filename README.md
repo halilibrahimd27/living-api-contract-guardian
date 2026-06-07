@@ -19,8 +19,10 @@ is a data question, not an archaeology project.
 > migrations, the **static client AST miner** (Python + JS/TS + gRPC),
 > the **traffic-replay contract augmentor** (HAR + gRPC log → merged
 > "de-facto contract"), the **evolution rule engine** (additive /
-> behavioral / breaking classification for OpenAPI + protobuf), and
-> the **GitHub App + reusable Action** that gate PRs on breaking diffs
+> behavioral / breaking classification for OpenAPI + protobuf), the
+> **GitHub App + reusable Action** that gate PRs on breaking diffs, and
+> the **LLM-drafted per-client migration guides** (cached,
+> tree-sitter-validated, served at `GET /guides/{diff_id}/{client_id}`)
 > are in place; usage-analytics endpoints land in later milestones.
 
 ## Why this is useful
@@ -50,6 +52,22 @@ HTTP/gRPC contract space is underserved. The Guardian gives you:
   `last_seen_at` for usage-decay tracking. The result is a materialized
   **de-facto contract** — the union of the static spec and what
   production actually does.
+- **Evolution rule engine** — `POST /diff` (and `guardian diff` on
+  the CLI) walks two contract versions, classifies each atomic delta
+  as `additive` / `behavioral` / `breaking` against a YAML ruleset,
+  joins the changes against the mined client catalogue, and returns a
+  structured `ChangeReport` with a per-change `affected_clients` list.
+- **CI gate for PRs** — a composite GitHub Action plus a Probot App
+  run the diff on every pull request, fail the check when breaking
+  changes are introduced (unless the `guardian:accept-breaking` label
+  is set), and post a check-run + comment with a per-client impact
+  table and inline annotations on the spec file.
+- **Per-client migration guides** — `GET /guides/{diff_id}/{client_id}`
+  returns an LLM-drafted Markdown migration guide tailored to one
+  downstream client's mined call sites. Guides are deterministically
+  cached by `hash(diff_id, client_id, prompt_version, model)`, and
+  every fenced code block is tree-sitter-validated before the guide is
+  persisted (the LLM is retried with a stricter prompt on parse error).
 
 ## Architecture
 
@@ -94,6 +112,7 @@ packages/
     engine.py      diff_contracts() — walk + classify + summarize
     ci_format.py   GitHub Markdown + annotations formatter
   guardian_guides/ LLM-powered per-client migration guide generator
+    models.py      GuideRequest / GuideContext / GuideResult pydantic v2
     llm.py         LiteLLM provider abstraction + MockLLMProvider
     service.py     GuideService: cache → prompt → LLM → validate
     syntax.py      tree-sitter snippet validation
@@ -123,11 +142,15 @@ Data model (one line each):
 | `Guide`             | A cached LLM-drafted per-client migration guide.                     |
 | `CiRun`             | A persisted GitHub PR check run produced by the App.                 |
 
-`ChangeReport` (returned by `POST /diff`, not persisted) is a transient
+`ChangeReport` (returned by `POST /diff`, which also persists a
+`ContractDiff` row and stamps the new `diff_id` onto the response so
+callers can hand it off to `GET /guides/{diff_id}/{client_id}`) is a
 pydantic-v2 payload: `{contract_kind, changes[ChangeRecord], summary,
-spectral_findings, ruleset_id}`, where each
+spectral_findings, ruleset_id, diff_id?}`, where each
 `ChangeRecord = {change_id, kind, location, verdict, rule_id, rationale,
-affected_clients[], before, after, detail}`.
+affected_clients[], before, after, detail}`. The `diff_id` field is
+unset on in-process invocations (`guardian_diff.diff_contracts`) that
+do not pass a session.
 
 ## Stack
 
@@ -316,6 +339,40 @@ fixtures through `handlePullRequest` with a stubbed octokit + injected
 comment body, and backend POST — no Python, no GitHub, no network.
 See [`apps/github_app/README.md`](apps/github_app/README.md) for the
 installation and full replay workflow.
+
+### Per-client migration guides (`GET /guides/{diff_id}/{client_id}`)
+
+Once `POST /diff` has persisted a `ContractDiff`, the guides endpoint
+turns that diff into a Markdown migration guide tailored to one
+downstream client's mined call sites:
+
+```bash
+curl -sS http://127.0.0.1:8000/guides/$DIFF_ID/acme%2Fusers-client
+# → text/markdown body; response headers carry:
+#     X-Guide-Cache: hit|miss
+#     X-Guide-Model: gpt-4o-mini
+#     X-Guide-Prompt-Version: v1
+#     X-Guide-Retries: 0
+```
+
+How it works:
+
+* The LLM call is abstracted behind a `LLMProvider` protocol. Production
+  uses `LiteLLMProvider` (which routes through `litellm.completion` with
+  `temperature=0` / `seed=0`); tests inject a `MockLLMProvider` keyed by
+  the SHA-256 of the rendered prompt.
+* Guides are cached by `hash(diff_id, client_id, prompt_version, model)`
+  in the `guides` table — a second call with the same key never invokes
+  the LLM. Bump `PROMPT_VERSION` in `guardian_guides.service` to
+  invalidate the cache after a template change.
+* Every fenced code block in the generated Markdown is parsed with
+  `tree-sitter` (Python / JS / TS / TSX). On parse error the service
+  retries with a stricter prompt up to `RETRY_LIMIT` times before
+  surfacing `502 Bad Gateway`.
+* The prompt template (`packages/guardian_guides/prompts/`) is grounded
+  by three explicit sections: the `ChangeReport` entries affecting the
+  client, up to N mined call sites with surrounding source lines, and a
+  language-specific style hint.
 
 ## Docker
 
