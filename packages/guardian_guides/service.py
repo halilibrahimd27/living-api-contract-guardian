@@ -80,14 +80,6 @@ _STYLE_HINTS: dict[str, str] = {
     ),
 }
 
-_LANG_FROM_LIBRARY: dict[str, GuideLanguage] = {
-    "requests": "python",
-    "httpx": "python",
-    "grpc": "python",
-    "fetch": "javascript",
-    "axios": "javascript",
-}
-
 
 class GuideGenerationError(RuntimeError):
     """Raised when the LLM repeatedly returns unparsable snippets.

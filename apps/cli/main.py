@@ -78,11 +78,11 @@ def migrate() -> None:
     """Run Alembic ``upgrade head`` against the configured database."""
     configure_logging()
     log = get_logger("cli.migrate")
-    from pathlib import Path
+    # Alembic imports are deferred so a `guardian version` / `guardian health`
+    # invocation in an environment where alembic isn't installed still works.
+    from alembic.config import Config  # noqa: PLC0415
 
-    from alembic.config import Config
-
-    from alembic import command
+    from alembic import command  # noqa: PLC0415
 
     root = Path(__file__).resolve().parents[2]
     cfg = Config(str(root / "alembic.ini"))
