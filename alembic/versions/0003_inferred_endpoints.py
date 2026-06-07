@@ -1,7 +1,7 @@
 """add inferred_endpoints table
 
 Revision ID: 0003_inferred_endpoints
-Revises: 0002_endpoints_usages_deprecations
+Revises: 0002_endpoints_usages
 Create Date: 2026-05-29
 
 """
@@ -16,7 +16,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from alembic import op
 
 revision: str = "0003_inferred_endpoints"
-down_revision: str | None = "0002_endpoints_usages_deprecations"
+down_revision: str | None = "0002_endpoints_usages"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

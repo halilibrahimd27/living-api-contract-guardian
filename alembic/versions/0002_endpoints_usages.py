@@ -1,6 +1,6 @@
 """add endpoints, usages, deprecations tables
 
-Revision ID: 0002_endpoints_usages_deprecations
+Revision ID: 0002_endpoints_usages
 Revises: 0001_initial
 Create Date: 2026-05-29
 
@@ -15,7 +15,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 from alembic import op
 
-revision: str = "0002_endpoints_usages_deprecations"
+revision: str = "0002_endpoints_usages"
 down_revision: str | None = "0001_initial"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
