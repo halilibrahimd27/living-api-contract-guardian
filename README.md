@@ -14,16 +14,18 @@ clients: upload a contract on every deploy, and the Guardian fingerprints
 it, extracts its endpoints, and tracks who uses what — so a deprecation
 is a data question, not an archaeology project.
 
-> Status: early build. The data model, service registry, contract
+> Status: active build. The data model, service registry, contract
 > ingestion (hashing + canonicalisation), health surface, CLI,
 > migrations, the **static client AST miner** (Python + JS/TS + gRPC),
 > the **traffic-replay contract augmentor** (HAR + gRPC log → merged
 > "de-facto contract"), the **evolution rule engine** (additive /
 > behavioral / breaking classification for OpenAPI + protobuf), the
-> **GitHub App + reusable Action** that gate PRs on breaking diffs, and
+> **GitHub App + reusable Action** that gate PRs on breaking diffs,
 > the **LLM-drafted per-client migration guides** (cached,
-> tree-sitter-validated, served at `GET /guides/{diff_id}/{client_id}`)
-> are in place; usage-analytics endpoints land in later milestones.
+> tree-sitter-validated, served at `GET /guides/{diff_id}/{client_id}`),
+> and the **deprecation campaign orchestrator** (Redis-backed RQ scheduler,
+> EWMA decay curves, automated reminder PRs, `GET /campaigns/{id}`)
+> are in place.
 
 ## Why this is useful
 
@@ -141,6 +143,9 @@ Data model (one line each):
 | `ContractDiff`      | A persisted `ChangeReport` produced by `POST /diff`.                 |
 | `Guide`             | A cached LLM-drafted per-client migration guide.                     |
 | `CiRun`             | A persisted GitHub PR check run produced by the App.                 |
+| `Campaign`          | A deprecation campaign tracking one endpoint/field through decay.    |
+| `CampaignMetric`    | One EWMA sample point for a campaign's decay curve.                  |
+| `ReminderPR`        | A reminder pull-request opened on a client repo for a campaign.      |
 
 `ChangeReport` (returned by `POST /diff`, which also persists a
 `ContractDiff` row and stamps the new `diff_id` onto the response so
@@ -226,6 +231,11 @@ A small fixture corpus under `fixtures/clients/` plus
 | POST   | `/ci/runs`                      | Upsert a persisted GitHub PR check run (used by the App) |
 | GET    | `/ci/runs/{owner}/{repo}/{pr}`  | Most recent persisted CI run for a PR                    |
 | GET    | `/guides/{diff_id}/{client_id}` | LLM-drafted migration guide (cached, `text/markdown`)    |
+| POST   | `/campaigns`                    | Create a deprecation campaign (draft state)              |
+| GET    | `/campaigns/{id}`               | Decay curve, remaining clients, reminder PRs             |
+| PATCH  | `/campaigns/{id}`               | Update mutable campaign fields                           |
+| POST   | `/campaigns/{id}/transition`    | Fire a state-machine trigger manually                    |
+| POST   | `/campaigns/{id}/evaluate`      | Sample usage + drive state transitions (inline)          |
 
 The traffic endpoint accepts a multipart form with `service_id`
 (required), an optional `client_id`, and at least one of `har` (an HTTP
