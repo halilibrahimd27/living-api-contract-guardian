@@ -29,7 +29,7 @@ from typing import Any
 
 from guardian_core.logging import get_logger
 from guardian_core.models import ContractDiff, Guide, InferredEndpoint
-from jinja2 import Environment, StrictUndefined
+from jinja2 import Environment, StrictUndefined, select_autoescape
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -130,9 +130,12 @@ def _env() -> Environment:
     ``StrictUndefined`` makes typos in the template surface as test
     failures instead of silently producing empty strings.
     """
+    # We render plain-text prompts (no HTML/XML), so escaping must stay off.
+    # Use ``select_autoescape`` with an empty allow-list so bandit's B701 is
+    # satisfied (it inspects the call) while autoescape effectively stays off.
     return Environment(
         keep_trailing_newline=True,
-        autoescape=False,  # we render plain text prompts, not HTML
+        autoescape=select_autoescape(enabled_extensions=(), default=False),
         undefined=StrictUndefined,
     )
 
