@@ -1,0 +1,50 @@
+name: E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Python must be installed before the stack starts so we can run
+      # pytest against the live services.
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Build and start e2e stack
+        # --wait makes Compose block until every service with a healthcheck
+        # reports healthy (or the timeout is hit).
+        # DOCKER_BUILDKIT=1 is the default on modern Docker, but setting it
+        # explicitly avoids surprises on older runners.
+        env:
+          DOCKER_BUILDKIT: "1"
+          GUARDIAN_GIT_SHA: ${{ github.sha }}
+        run: |
+          docker compose -f infra/docker-compose.e2e.yml \
+            up -d --build --wait --timeout 300
+
+      - name: Run e2e tests
+        env:
+          E2E_API_URL: http://localhost:8000
+          E2E_DASHBOARD_URL: http://localhost:3000
+        run: pytest tests/e2e/ -m e2e -v
+
+      - name: Dump service logs on failure
+        if: failure()
+        run: docker compose -f infra/docker-compose.e2e.yml logs --no-color
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose -f infra/docker-compose.e2e.yml down -v
