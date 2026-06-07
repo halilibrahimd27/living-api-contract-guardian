@@ -4,9 +4,20 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 GuideLanguage = Literal["python", "javascript", "typescript"]
+
+# Identifiers that must not be silently accepted as empty / whitespace-only.
+# Stripping is conservative: a diff_id of ``"  "`` is operator error, not
+# a valid cache key, and a client_id of ``""`` would collapse the per-client
+# cache with the URL-routed value. Both are rejected at the Pydantic boundary
+# so the same constraint holds whether the request comes from the HTTP route
+# or from a direct ``GuideService.generate()`` call.
+_NonEmptyId = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=512),
+]
 
 
 class CallSiteContext(BaseModel):
@@ -76,8 +87,8 @@ class GuideRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    diff_id: str
-    client_id: str
+    diff_id: _NonEmptyId
+    client_id: _NonEmptyId
     model: Annotated[str, Field(min_length=1, max_length=128)] = "gpt-4o-mini"
     max_call_sites: Annotated[int, Field(ge=1, le=50)] = 10
 

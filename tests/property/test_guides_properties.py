@@ -6,6 +6,7 @@ Uses Hypothesis to verify invariants about:
 - Code block extraction (fence parsing)
 - Snippet validation (tree-sitter integration)
 - Mock LLM provider (deterministic test doubles)
+- Pydantic model validation (GuideRequest, GuideResult, etc.)
 """
 
 from __future__ import annotations
@@ -14,6 +15,10 @@ import hashlib
 
 import pytest
 from guardian_guides import (
+    CallSiteContext,
+    ChangeSummary,
+    GuideRequest,
+    GuideResult,
     MockLLMProvider,
     SnippetParseError,
     build_cache_key,
@@ -24,6 +29,7 @@ from guardian_guides import (
 from guardian_guides.syntax import CodeBlock
 from hypothesis import assume, given
 from hypothesis import strategies as st
+from pydantic import ValidationError
 
 # ============================================================================
 # Strategies for property test inputs
@@ -731,3 +737,510 @@ class TestGuideServiceIntegration:
                 # Validation errors are acceptable; the invariant only
                 # applies to successful reports.
                 pass
+
+
+# ============================================================================
+# Property tests for Pydantic models: GuideRequest, GuideResult, etc.
+# ============================================================================
+
+
+# Alphabet for non-empty identifiers. Excludes surrogates and every category
+# of whitespace / control characters Pydantic's ``strip_whitespace=True`` (or
+# Python's ``str.strip()``) would chew off the ends of the string. Without
+# this filter Hypothesis happily generates e.g. ``"\r"`` — a one-char string
+# that strips to empty and trips ``min_length=1``, which is exactly the
+# behavior we now want for *real* inputs but defeats the "valid input"
+# generators below.
+_ID_ALPHABET = st.characters(
+    exclude_categories=("Cs", "Cc", "Zs", "Zl", "Zp"),
+    exclude_characters=" \t\n\r\f\v",
+)
+
+
+@st.composite
+def guide_requests(draw: st.DrawFn) -> tuple[str, str, str, int]:
+    """Generate valid GuideRequest inputs."""
+    diff_id = draw(st.text(min_size=1, max_size=256, alphabet=_ID_ALPHABET))
+    client_id = draw(st.text(min_size=1, max_size=256, alphabet=_ID_ALPHABET))
+    model = draw(st.text(min_size=1, max_size=128, alphabet=_ID_ALPHABET))
+    max_call_sites = draw(st.integers(min_value=1, max_value=50))
+    return diff_id, client_id, model, max_call_sites
+
+
+@st.composite
+def guide_results(draw: st.DrawFn) -> tuple[str, str, str, str, str, str, int, bool]:
+    """Generate valid GuideResult inputs."""
+    diff_id = draw(
+        st.text(min_size=1, max_size=256, alphabet=st.characters(exclude_categories=("Cs",)))
+    )
+    client_id = draw(
+        st.text(min_size=1, max_size=256, alphabet=st.characters(exclude_categories=("Cs",)))
+    )
+    prompt_version = draw(
+        st.text(min_size=1, max_size=64, alphabet=st.characters(exclude_categories=("Cs",)))
+    )
+    model = draw(
+        st.text(min_size=1, max_size=128, alphabet=st.characters(exclude_categories=("Cs",)))
+    )
+    prompt_hash_val = draw(
+        st.text(
+            min_size=64,
+            max_size=64,
+            alphabet="0123456789abcdef",
+        )
+    )
+    markdown = draw(simple_text)
+    retries = draw(st.integers(min_value=0, max_value=10))
+    served_from_cache = draw(st.booleans())
+    return (
+        diff_id,
+        client_id,
+        prompt_version,
+        model,
+        prompt_hash_val,
+        markdown,
+        retries,
+        served_from_cache,
+    )
+
+
+@st.composite
+def call_site_contexts(
+    draw: st.DrawFn,
+) -> tuple[str, str, int, str, str, str, str, list[str], list[str]]:
+    """Generate valid CallSiteContext inputs."""
+    repo = draw(
+        st.text(min_size=1, max_size=512, alphabet=st.characters(exclude_categories=("Cs",)))
+    )
+    file_path = draw(
+        st.text(min_size=1, max_size=1024, alphabet=st.characters(exclude_categories=("Cs",)))
+    )
+    line = draw(st.integers(min_value=1, max_value=100000))
+    language = draw(st.sampled_from(["python", "javascript", "typescript"]))
+    client_library = draw(
+        st.text(min_size=1, max_size=64, alphabet=st.characters(exclude_categories=("Cs",)))
+    )
+    method = draw(
+        st.text(min_size=1, max_size=32, alphabet=st.characters(exclude_categories=("Cs",)))
+    )
+    path_template = draw(
+        st.text(min_size=1, max_size=1024, alphabet=st.characters(exclude_categories=("Cs",)))
+    )
+    fields = draw(
+        st.lists(
+            st.text(min_size=1, max_size=32, alphabet=st.characters(exclude_categories=("Cs",))),
+            max_size=5,
+        )
+    )
+    surrounding_lines = draw(
+        st.lists(
+            st.text(min_size=0, max_size=500, alphabet=st.characters(exclude_categories=("Cs",))),
+            max_size=15,
+        )
+    )
+    return (
+        repo,
+        file_path,
+        line,
+        language,
+        client_library,
+        method,
+        path_template,
+        fields,
+        surrounding_lines,
+    )
+
+
+@st.composite
+def change_summaries(draw: st.DrawFn) -> tuple[str, str, str, str, str, str]:
+    """Generate valid ChangeSummary inputs."""
+    change_id = draw(
+        st.text(min_size=1, max_size=256, alphabet=st.characters(exclude_categories=("Cs",)))
+    )
+    kind = draw(
+        st.text(min_size=1, max_size=256, alphabet=st.characters(exclude_categories=("Cs",)))
+    )
+    location = draw(
+        st.text(min_size=1, max_size=256, alphabet=st.characters(exclude_categories=("Cs",)))
+    )
+    verdict = draw(st.sampled_from(["additive", "behavioral", "breaking"]))
+    rule_id = draw(
+        st.text(min_size=1, max_size=256, alphabet=st.characters(exclude_categories=("Cs",)))
+    )
+    rationale = draw(
+        st.text(min_size=0, max_size=1000, alphabet=st.characters(exclude_categories=("Cs",)))
+    )
+    return change_id, kind, location, verdict, rule_id, rationale
+
+
+class TestGuideRequest:
+    """Invariants about GuideRequest model."""
+
+    @given(guide_requests())
+    def test_model_creation_with_valid_inputs(
+        self,
+        inputs: tuple[str, str, str, int],
+    ) -> None:
+        """GuideRequest can be created with valid inputs."""
+        diff_id, client_id, model, max_call_sites = inputs
+        request = GuideRequest(
+            diff_id=diff_id,
+            client_id=client_id,
+            model=model,
+            max_call_sites=max_call_sites,
+        )
+        assert request.diff_id == diff_id
+        assert request.client_id == client_id
+        assert request.model == model
+        assert request.max_call_sites == max_call_sites
+
+    @given(guide_requests())
+    def test_default_model_is_gpt4_mini(
+        self,
+        inputs: tuple[str, str, str, int],
+    ) -> None:
+        """GuideRequest.model defaults to gpt-4o-mini when not specified."""
+        diff_id, client_id, _, max_call_sites = inputs
+        request = GuideRequest(
+            diff_id=diff_id,
+            client_id=client_id,
+            max_call_sites=max_call_sites,
+        )
+        assert request.model == "gpt-4o-mini"
+
+    @given(guide_requests())
+    def test_default_max_call_sites_is_10(
+        self,
+        inputs: tuple[str, str, str, int],
+    ) -> None:
+        """GuideRequest.max_call_sites defaults to 10."""
+        diff_id, client_id, model, _ = inputs
+        request = GuideRequest(
+            diff_id=diff_id,
+            client_id=client_id,
+            model=model,
+        )
+        assert request.max_call_sites == 10
+
+    # Sample directly from the whitespace family rather than filtering
+    # ``st.text()`` — Hypothesis would otherwise throw away ~all generated
+    # examples and trip the ``filter_too_much`` health check.
+    _WHITESPACE_IDS = st.text(min_size=0, max_size=8, alphabet=st.sampled_from(" \t\n\r\f\v"))
+
+    @given(_WHITESPACE_IDS)
+    def test_empty_diff_id_invalid(self, diff_id: str) -> None:
+        """GuideRequest rejects empty / whitespace-only diff_id."""
+        with pytest.raises(ValidationError):
+            GuideRequest(diff_id=diff_id, client_id="c", model="m", max_call_sites=1)
+
+    @given(_WHITESPACE_IDS)
+    def test_empty_client_id_invalid(self, client_id: str) -> None:
+        """GuideRequest rejects empty / whitespace-only client_id."""
+        with pytest.raises(ValidationError):
+            GuideRequest(diff_id="d", client_id=client_id, model="m", max_call_sites=1)
+
+    @given(st.integers(max_value=0))
+    def test_max_call_sites_zero_or_negative_invalid(self, max_call_sites: int) -> None:
+        """GuideRequest rejects max_call_sites <= 0."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            GuideRequest(
+                diff_id="d",
+                client_id="c",
+                model="m",
+                max_call_sites=max_call_sites,
+            )
+
+    @given(st.integers(min_value=51))
+    def test_max_call_sites_over_limit_invalid(self, max_call_sites: int) -> None:
+        """GuideRequest rejects max_call_sites > 50."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            GuideRequest(
+                diff_id="d",
+                client_id="c",
+                model="m",
+                max_call_sites=max_call_sites,
+            )
+
+
+class TestGuideResult:
+    """Invariants about GuideResult model."""
+
+    from guardian_guides import GuideResult
+
+    @given(guide_results())
+    def test_model_creation_with_valid_inputs(
+        self,
+        inputs: tuple[str, str, str, str, str, str, int, bool],
+    ) -> None:
+        """GuideResult can be created with valid inputs."""
+        diff_id, client_id, prompt_version, model, prompt_hash_val, markdown, retries, cache = (
+            inputs
+        )
+        result = GuideResult(
+            diff_id=diff_id,
+            client_id=client_id,
+            prompt_version=prompt_version,
+            model=model,
+            prompt_hash=prompt_hash_val,
+            markdown=markdown,
+            retries=retries,
+            served_from_cache=cache,
+        )
+        assert result.diff_id == diff_id
+        assert result.client_id == client_id
+        assert result.prompt_version == prompt_version
+        assert result.model == model
+        assert result.prompt_hash == prompt_hash_val
+        assert result.markdown == markdown
+        assert result.retries == retries
+        assert result.served_from_cache == cache
+
+    @given(guide_results())
+    def test_retries_defaults_to_zero(
+        self,
+        inputs: tuple[str, str, str, str, str, str, int, bool],
+    ) -> None:
+        """GuideResult.retries defaults to 0."""
+        diff_id, client_id, pv, model, ph, markdown, _, cache = inputs
+        result = GuideResult(
+            diff_id=diff_id,
+            client_id=client_id,
+            prompt_version=pv,
+            model=model,
+            prompt_hash=ph,
+            markdown=markdown,
+            served_from_cache=cache,
+        )
+        assert result.retries == 0
+
+    @given(guide_results())
+    def test_cache_flag_defaults_to_false(
+        self,
+        inputs: tuple[str, str, str, str, str, str, int, bool],
+    ) -> None:
+        """GuideResult.served_from_cache defaults to False."""
+        diff_id, client_id, pv, model, ph, markdown, retries, _ = inputs
+        result = GuideResult(
+            diff_id=diff_id,
+            client_id=client_id,
+            prompt_version=pv,
+            model=model,
+            prompt_hash=ph,
+            markdown=markdown,
+            retries=retries,
+        )
+        assert result.served_from_cache is False
+
+    @given(guide_results())
+    def test_roundtrip_via_model_dump(
+        self,
+        inputs: tuple[str, str, str, str, str, str, int, bool],
+    ) -> None:
+        """GuideResult roundtrips through model_dump() and model_validate()."""
+        diff_id, client_id, pv, model, ph, markdown, retries, cache = inputs
+        original = GuideResult(
+            diff_id=diff_id,
+            client_id=client_id,
+            prompt_version=pv,
+            model=model,
+            prompt_hash=ph,
+            markdown=markdown,
+            retries=retries,
+            served_from_cache=cache,
+        )
+        dumped = original.model_dump()
+        reconstructed = GuideResult.model_validate(dumped)
+        assert reconstructed == original
+
+
+class TestCallSiteContext:
+    """Invariants about CallSiteContext model."""
+
+    from guardian_guides import CallSiteContext
+
+    @given(call_site_contexts())
+    def test_model_creation_with_valid_inputs(
+        self,
+        inputs: tuple[str, str, int, str, str, str, str, list[str], list[str]],
+    ) -> None:
+        """CallSiteContext can be created with valid inputs."""
+        repo, file_path, line, lang, client_lib, method, path_tmpl, fields, surrounding = inputs
+        ctx = CallSiteContext(
+            repo=repo,
+            file=file_path,
+            line=line,
+            language=lang,
+            client_library=client_lib,
+            method=method,
+            path_template=path_tmpl,
+            fields=fields,
+            surrounding_lines=surrounding,
+        )
+        assert ctx.repo == repo
+        assert ctx.file == file_path
+        assert ctx.line == line
+        assert ctx.language == lang
+        assert ctx.client_library == client_lib
+        assert ctx.method == method
+        assert ctx.path_template == path_tmpl
+        assert ctx.fields == fields
+        assert ctx.surrounding_lines == surrounding
+
+    @given(call_site_contexts())
+    def test_fields_defaults_to_empty_list(
+        self,
+        inputs: tuple[str, str, int, str, str, str, str, list[str], list[str]],
+    ) -> None:
+        """CallSiteContext.fields defaults to empty list."""
+        repo, file_path, line, lang, client_lib, method, path_tmpl, _, surrounding = inputs
+        ctx = CallSiteContext(
+            repo=repo,
+            file=file_path,
+            line=line,
+            language=lang,
+            client_library=client_lib,
+            method=method,
+            path_template=path_tmpl,
+            surrounding_lines=surrounding,
+        )
+        assert ctx.fields == []
+
+    @given(call_site_contexts())
+    def test_surrounding_lines_defaults_to_empty_list(
+        self,
+        inputs: tuple[str, str, int, str, str, str, str, list[str], list[str]],
+    ) -> None:
+        """CallSiteContext.surrounding_lines defaults to empty list."""
+        repo, file_path, line, lang, client_lib, method, path_tmpl, fields, _ = inputs
+        ctx = CallSiteContext(
+            repo=repo,
+            file=file_path,
+            line=line,
+            language=lang,
+            client_library=client_lib,
+            method=method,
+            path_template=path_tmpl,
+            fields=fields,
+        )
+        assert ctx.surrounding_lines == []
+
+    @given(st.integers(max_value=0))
+    def test_line_zero_or_negative_invalid(self, line: int) -> None:
+        """CallSiteContext rejects line <= 0."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            CallSiteContext(
+                repo="r",
+                file="f",
+                line=line,
+                language="python",
+                client_library="cl",
+                method="m",
+                path_template="pt",
+            )
+
+    @given(st.text(max_size=0))
+    def test_empty_repo_invalid(self, repo: str) -> None:
+        """CallSiteContext rejects empty repo."""
+        from pydantic import ValidationError
+
+        assume(len(repo.strip()) == 0)
+        with pytest.raises(ValidationError):
+            CallSiteContext(
+                repo=repo,
+                file="f",
+                line=1,
+                language="python",
+                client_library="cl",
+                method="m",
+                path_template="pt",
+            )
+
+    @given(call_site_contexts())
+    def test_roundtrip_via_model_dump(
+        self,
+        inputs: tuple[str, str, int, str, str, str, str, list[str], list[str]],
+    ) -> None:
+        """CallSiteContext roundtrips through model_dump()."""
+        repo, file_path, line, lang, client_lib, method, path_tmpl, fields, surrounding = inputs
+        original = CallSiteContext(
+            repo=repo,
+            file=file_path,
+            line=line,
+            language=lang,
+            client_library=client_lib,
+            method=method,
+            path_template=path_tmpl,
+            fields=fields,
+            surrounding_lines=surrounding,
+        )
+        dumped = original.model_dump()
+        reconstructed = CallSiteContext.model_validate(dumped)
+        assert reconstructed == original
+
+
+class TestChangeSummary:
+    """Invariants about ChangeSummary model."""
+
+    from guardian_guides import ChangeSummary
+
+    @given(change_summaries())
+    def test_model_creation_with_valid_inputs(
+        self,
+        inputs: tuple[str, str, str, str, str, str],
+    ) -> None:
+        """ChangeSummary can be created with valid inputs."""
+        change_id, kind, location, verdict, rule_id, rationale = inputs
+        summary = ChangeSummary(
+            change_id=change_id,
+            kind=kind,
+            location=location,
+            verdict=verdict,
+            rule_id=rule_id,
+            rationale=rationale,
+        )
+        assert summary.change_id == change_id
+        assert summary.kind == kind
+        assert summary.location == location
+        assert summary.verdict == verdict
+        assert summary.rule_id == rule_id
+        assert summary.rationale == rationale
+
+    @given(st.sampled_from(["invalid", "unknown", "neutral"]))
+    def test_invalid_verdict_rejected(self, invalid_verdict: str) -> None:
+        """ChangeSummary rejects verdicts not in {additive, behavioral, breaking}."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            ChangeSummary(
+                change_id="id",
+                kind="k",
+                location="l",
+                verdict=invalid_verdict,  # type: ignore
+                rule_id="r",
+                rationale="rat",
+            )
+
+    @given(change_summaries())
+    def test_roundtrip_via_model_dump(
+        self,
+        inputs: tuple[str, str, str, str, str, str],
+    ) -> None:
+        """ChangeSummary roundtrips through model_dump()."""
+        change_id, kind, location, verdict, rule_id, rationale = inputs
+        original = ChangeSummary(
+            change_id=change_id,
+            kind=kind,
+            location=location,
+            verdict=verdict,
+            rule_id=rule_id,
+            rationale=rationale,
+        )
+        dumped = original.model_dump()
+        reconstructed = ChangeSummary.model_validate(dumped)
+        assert reconstructed == original
