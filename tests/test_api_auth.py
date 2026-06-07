@@ -11,9 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 
-async def _status_via_raw_asgi(
-    app: object, path: str, headers: list[tuple[bytes, bytes]]
-) -> int:
+async def _status_via_raw_asgi(app: object, path: str, headers: list[tuple[bytes, bytes]]) -> int:
     """Drive a GET straight through the ASGI app and return the status code.
 
     Bypasses the httpx ``TestClient``, which ASCII-encodes outgoing header
@@ -113,7 +111,5 @@ class TestApiKeyEnabled:
         from apps.api.main import create_app
 
         app = create_app()
-        status = await _status_via_raw_asgi(
-            app, "/services", [(b"x-api-key", b"\xe9\xff")]
-        )
+        status = await _status_via_raw_asgi(app, "/services", [(b"x-api-key", b"\xe9\xff")])
         assert status == 401
