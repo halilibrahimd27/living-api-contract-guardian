@@ -63,3 +63,12 @@ jobs:
         # required for the gate to be meaningful — a regression that
         # broke `handlePullRequest` would still fail this step.
         run: node --test apps/github_app/test/*.test.js
+      - name: Dashboard lint (next lint)
+        run: |
+          cd apps/dashboard
+          npm install --ci
+          npm run lint
+      - name: Dashboard typecheck (tsc --noEmit)
+        run: |
+          cd apps/dashboard
+          npm run typecheck
