@@ -110,3 +110,22 @@ def diff(
         additive=report.summary.additive,
     )
     return report
+
+
+@router.get(
+    "/{diff_id}",
+    response_model=ChangeReport,
+    status_code=status.HTTP_200_OK,
+)
+def get_diff(
+    diff_id: str,
+    db: Session = Depends(get_db),
+) -> ChangeReport:
+    """Retrieve a previously computed diff by its id."""
+    row = db.get(ContractDiff, diff_id)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"diff {diff_id!r} not found",
+        )
+    return ChangeReport.model_validate(row.report_json)

@@ -29,6 +29,13 @@ router = APIRouter(prefix="/services", tags=["services"])
 log = get_logger(__name__)
 
 
+@router.get("", response_model=list[ServiceRead])
+def list_services(db: Session = Depends(get_db)) -> list[ServiceRead]:
+    """List all registered services."""
+    rows = db.scalars(select(Service).order_by(Service.created_at.desc())).all()
+    return [ServiceRead.model_validate(s) for s in rows]
+
+
 @router.post("", response_model=ServiceRead, status_code=status.HTTP_201_CREATED)
 def create_service(payload: ServiceCreate, db: Session = Depends(get_db)) -> ServiceRead:
     """Register a new Service."""
@@ -54,6 +61,39 @@ def get_service(service_id: str, db: Session = Depends(get_db)) -> ServiceRead:
     if service is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="service not found")
     return ServiceRead.model_validate(service)
+
+
+@router.get("/{service_id}/contracts", response_model=list[ContractRead])
+def list_contracts(service_id: str, db: Session = Depends(get_db)) -> list[ContractRead]:
+    """List all contracts (with their latest version) for a service."""
+    service = db.get(Service, service_id)
+    if service is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="service not found")
+    contracts = db.scalars(
+        select(Contract)
+        .where(Contract.service_id == service_id)
+        .order_by(Contract.created_at.desc())
+    ).all()
+    result: list[ContractRead] = []
+    for contract in contracts:
+        latest = db.scalar(
+            select(ContractVersion)
+            .where(ContractVersion.contract_id == contract.id)
+            .order_by(ContractVersion.created_at.desc())
+        )
+        if latest is None:
+            continue
+        result.append(
+            ContractRead(
+                id=contract.id,
+                service_id=service_id,
+                name=contract.name,
+                kind=contract.kind,
+                version=ContractVersionRead.model_validate(latest),
+                created=False,
+            )
+        )
+    return result
 
 
 def _materialize_spec_bytes(payload: ContractUpload) -> tuple[bytes, bytes]:

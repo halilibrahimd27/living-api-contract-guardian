@@ -124,6 +124,21 @@ def _build_read(campaign: Campaign, session: Session) -> CampaignRead:
     )
 
 
+@router.get("", response_model=list[CampaignRead])
+def list_campaigns(
+    session: Session = Depends(get_db),
+) -> list[CampaignRead]:
+    """List all deprecation campaigns ordered by creation date."""
+    campaigns = (
+        session.execute(
+            select(Campaign).order_by(Campaign.created_at.desc())
+        )
+        .scalars()
+        .all()
+    )
+    return [_build_read(c, session) for c in campaigns]
+
+
 @router.post("", response_model=CampaignRead, status_code=201)
 def create_campaign(
     body: CampaignCreate,
