@@ -44,14 +44,13 @@ from hypothesis import strategies as st
 
 
 def _campaign_id_strategy() -> st.SearchStrategy[str]:
-    """Generate valid campaign IDs (UUIDs)."""
-    return st.text(
-        alphabet="0123456789abcdef-",
-        min_size=36,
-        max_size=36,
-    ).filter(
-        lambda s: len(s) == 36 and s.count("-") == 4
-    )
+    """Generate valid campaign IDs (UUIDs).
+
+    Uses ``st.uuids().map(str)`` to avoid the filter-heavy alphabet-based
+    approach, which trips Hypothesis's ``filter_too_much`` health check
+    when composed with other strategies.
+    """
+    return st.uuids().map(str)
 
 
 def _peak_usage_strategy() -> st.SearchStrategy[int]:
