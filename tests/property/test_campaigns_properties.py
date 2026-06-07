@@ -299,7 +299,10 @@ class TestCampaignFSMProperties:
         fsm.evaluate(low_usage)
         assert fsm.current_state == "decaying"
 
-        # decaying -> ready_to_remove: use very low usage
+        # decaying -> ready_to_remove: use very low usage.
+        # Reset the transition lock so the second evaluate isn't blocked
+        # by the 5 s re-entrancy guard.
+        fsm._last_transition_at = None
         very_low_usage = max(0, int(peak_usage * 0.5 / 100.0))
         fsm.evaluate(very_low_usage)
         assert fsm.current_state == "ready_to_remove"
@@ -373,7 +376,10 @@ class TestDecayProperties:
         ewma = compute_ewma(new_value, prev_ewma, decay_window_days)
         min_val = min(new_value, prev_ewma)
         max_val = max(new_value, prev_ewma)
-        assert min_val <= ewma <= max_val
+        # Allow a small floating-point tolerance: α*x + (1-α)*x can round
+        # to one ULP below x for large windows due to IEEE-754 rounding.
+        tol = max(1e-9, abs(max_val) * 1e-12)
+        assert min_val - tol <= ewma <= max_val + tol
 
     @given(
         constant_value=_ewma_value_strategy(),
@@ -435,7 +441,7 @@ class TestDecayProperties:
         assert rounded == re_rounded
 
     @given(
-        st.lists(
+        values=st.lists(
             _ewma_value_strategy(),
             min_size=1,
             max_size=20,
