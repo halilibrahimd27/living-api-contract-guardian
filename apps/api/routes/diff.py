@@ -26,7 +26,7 @@ def _build_ruleset(payload: DiffRequest) -> RuleSet:
         custom = load_rules_from_text(payload.rules_yaml, source="POST /diff body")
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"invalid rules_yaml: {exc}",
         ) from exc
     return defaults.merge(custom)
@@ -47,7 +47,7 @@ def diff(
     if payload.kind == "openapi":
         if payload.before_spec is None or payload.after_spec is None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="openapi diff requires 'before_spec' and 'after_spec'",
             )
         report = diff_contracts(
@@ -61,7 +61,7 @@ def diff(
     else:  # proto
         if payload.before_b64 is None or payload.after_b64 is None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="proto diff requires 'before_b64' and 'after_b64'",
             )
         try:
@@ -69,7 +69,7 @@ def diff(
             after_bytes = base64.b64decode(payload.after_b64, validate=True)
         except Exception as exc:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="proto inputs must be base64-encoded FileDescriptorSet blobs",
             ) from exc
         try:

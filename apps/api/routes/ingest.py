@@ -71,7 +71,7 @@ async def ingest_traffic_route(
     grpc_bytes = await _read_capped(grpc_log)
     if not har_bytes and not grpc_bytes:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="at least one of 'har' or 'grpc_log' is required",
         )
 

@@ -184,9 +184,7 @@ class TestSpectralFindingValidation:
         assert finding.path == ["paths", "users", "get", "responses", "200"]
 
     @given(st.text(min_size=1, max_size=100), st.integers(min_value=0, max_value=10))
-    def test_spectral_finding_various_codes_and_severities(
-        self, code: str, severity: int
-    ) -> None:
+    def test_spectral_finding_various_codes_and_severities(self, code: str, severity: int) -> None:
         """SpectralFinding accepts various code and severity values."""
         finding = SpectralFinding(
             code=code,

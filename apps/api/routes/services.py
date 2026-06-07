@@ -61,7 +61,7 @@ def _materialize_spec_bytes(payload: ContractUpload) -> tuple[bytes, bytes]:
     if payload.kind == "openapi":
         if payload.spec is None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="openapi contracts require 'spec' (a JSON object)",
             )
         canonical = canonicalize_openapi(payload.spec)
@@ -69,7 +69,7 @@ def _materialize_spec_bytes(payload: ContractUpload) -> tuple[bytes, bytes]:
     # proto
     if payload.spec_b64 is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="proto contracts require 'spec_b64' (base64 FileDescriptorSet)",
         )
     raw = base64.b64decode(payload.spec_b64, validate=True)

@@ -29,15 +29,24 @@ from hypothesis import strategies as st
 # Strategies for property test inputs
 # ============================================================================
 
+
 @st.composite
 def cache_key_inputs(
     draw: st.DrawFn,
 ) -> tuple[str, str, str, str]:
     """Generate valid cache key inputs: (diff_id, client_id, prompt_version, model)."""
-    diff_id = draw(st.text(min_size=1, max_size=256, alphabet=st.characters(exclude_categories=("Cs",))))
-    client_id = draw(st.text(min_size=1, max_size=256, alphabet=st.characters(exclude_categories=("Cs",))))
-    prompt_version = draw(st.text(min_size=1, max_size=64, alphabet=st.characters(exclude_categories=("Cs",))))
-    model = draw(st.text(min_size=1, max_size=128, alphabet=st.characters(exclude_categories=("Cs",))))
+    diff_id = draw(
+        st.text(min_size=1, max_size=256, alphabet=st.characters(exclude_categories=("Cs",)))
+    )
+    client_id = draw(
+        st.text(min_size=1, max_size=256, alphabet=st.characters(exclude_categories=("Cs",)))
+    )
+    prompt_version = draw(
+        st.text(min_size=1, max_size=64, alphabet=st.characters(exclude_categories=("Cs",)))
+    )
+    model = draw(
+        st.text(min_size=1, max_size=128, alphabet=st.characters(exclude_categories=("Cs",)))
+    )
     return diff_id, client_id, prompt_version, model
 
 
@@ -71,10 +80,12 @@ def markdown_with_fences(draw: st.DrawFn, num_fences: int = 1) -> str:
         parts.append(prefix)
 
         # Fence with optional language
-        lang = draw(st.one_of(
-            st.just(""),
-            st.sampled_from(["python", "javascript", "typescript", "py", "js", "ts"]),
-        ))
+        lang = draw(
+            st.one_of(
+                st.just(""),
+                st.sampled_from(["python", "javascript", "typescript", "py", "js", "ts"]),
+            )
+        )
         if lang:
             parts.append(f"```{lang}\n")
         else:
@@ -83,11 +94,13 @@ def markdown_with_fences(draw: st.DrawFn, num_fences: int = 1) -> str:
         # Body (must not contain backticks to avoid premature fence close).
         # min_size=1 prevents empty-body fences from merging under the regex
         # when multiple fences appear consecutively with no prefix text.
-        body = draw(st.text(
-            alphabet=st.characters(exclude_characters="`", exclude_categories=("Cc", "Cs")),
-            min_size=1,
-            max_size=200,
-        ))
+        body = draw(
+            st.text(
+                alphabet=st.characters(exclude_characters="`", exclude_categories=("Cc", "Cs")),
+                min_size=1,
+                max_size=200,
+            )
+        )
         parts.append(body)
         parts.append("\n```\n")
 
@@ -100,33 +113,42 @@ def markdown_with_fences(draw: st.DrawFn, num_fences: int = 1) -> str:
 @st.composite
 def valid_code_snippets(draw: st.DrawFn) -> tuple[str, str]:
     """Generate (language, valid_code) pairs."""
-    language, code = draw(st.sampled_from([
-        ("python", "x = 1\ny = x + 2"),
-        ("python", "def foo():\n    pass"),
-        ("javascript", "const x = 1;\nconst y = x + 2;"),
-        ("javascript", "function foo() {}"),
-        ("typescript", "const x: number = 1;"),
-        ("typescript", "interface Point { x: number; y: number; }"),
-    ]))
+    language, code = draw(
+        st.sampled_from(
+            [
+                ("python", "x = 1\ny = x + 2"),
+                ("python", "def foo():\n    pass"),
+                ("javascript", "const x = 1;\nconst y = x + 2;"),
+                ("javascript", "function foo() {}"),
+                ("typescript", "const x: number = 1;"),
+                ("typescript", "interface Point { x: number; y: number; }"),
+            ]
+        )
+    )
     return language, code
 
 
 @st.composite
 def invalid_code_snippets(draw: st.DrawFn) -> tuple[str, str]:
     """Generate (language, invalid_code) pairs that fail tree-sitter parsing."""
-    language, code = draw(st.sampled_from([
-        ("python", "def foo(:\n    pass"),  # Missing closing paren
-        ("python", "x = "),  # Incomplete statement
-        ("javascript", "const x = {;"),  # Invalid brace
-        ("javascript", "function foo(( ) {}"),  # Double paren
-        ("typescript", "interface X { x: }"),  # Missing type
-    ]))
+    language, code = draw(
+        st.sampled_from(
+            [
+                ("python", "def foo(:\n    pass"),  # Missing closing paren
+                ("python", "x = "),  # Incomplete statement
+                ("javascript", "const x = {;"),  # Invalid brace
+                ("javascript", "function foo(( ) {}"),  # Double paren
+                ("typescript", "interface X { x: }"),  # Missing type
+            ]
+        )
+    )
     return language, code
 
 
 # ============================================================================
 # Property tests for cache key generation
 # ============================================================================
+
 
 class TestBuildCacheKey:
     """Invariants about cache key generation."""
@@ -175,8 +197,8 @@ class TestBuildCacheKey:
         inputs: tuple[tuple[str, str, str, str], tuple[str, str, str, str]],
     ) -> None:
         """Different inputs (almost always) produce different keys."""
-        (diff_id1, client_id1, pv1, model1) = inputs[0]
-        (diff_id2, client_id2, pv2, model2) = inputs[1]
+        diff_id1, client_id1, pv1, model1 = inputs[0]
+        diff_id2, client_id2, pv2, model2 = inputs[1]
 
         key1 = build_cache_key(
             diff_id=diff_id1,
@@ -250,6 +272,7 @@ class TestBuildCacheKey:
 # Property tests for prompt hashing
 # ============================================================================
 
+
 class TestPromptHash:
     """Invariants about prompt hash generation."""
 
@@ -296,6 +319,7 @@ class TestPromptHash:
 # ============================================================================
 # Property tests for code block extraction
 # ============================================================================
+
 
 class TestExtractCodeBlocks:
     """Invariants about extracting fenced code blocks from markdown."""
@@ -373,13 +397,15 @@ class TestExtractCodeBlocks:
         assert len(blocks) == 1
         assert blocks[0].language == "python"
 
-    @given(st.text(
-        min_size=1,
-        max_size=20,
-        alphabet=st.sampled_from(
-            list("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_+-")
-        ),
-    ))
+    @given(
+        st.text(
+            min_size=1,
+            max_size=20,
+            alphabet=st.sampled_from(
+                list("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_+-")
+            ),
+        )
+    )
     def test_language_whitespace_stripped(self, lang: str) -> None:
         """Trailing whitespace after the language tag is stripped.
 
@@ -396,6 +422,7 @@ class TestExtractCodeBlocks:
 # ============================================================================
 # Property tests for snippet validation
 # ============================================================================
+
 
 class TestValidateMarkdownSnippets:
     """Invariants about validating code snippets in markdown."""
@@ -504,6 +531,7 @@ class TestValidateMarkdownSnippets:
 # Property tests for MockLLMProvider
 # ============================================================================
 
+
 class TestMockLLMProvider:
     """Invariants about the mock LLM provider."""
 
@@ -560,12 +588,14 @@ class TestMockLLMProvider:
         assert h == prompt_hash(prompt)
         assert response == "response"
 
-    @given(st.lists(
-        st.tuples(simple_text, simple_text),
-        min_size=1,
-        max_size=10,
-        unique_by=lambda x: x[0],  # Unique prompts
-    ))
+    @given(
+        st.lists(
+            st.tuples(simple_text, simple_text),
+            min_size=1,
+            max_size=10,
+            unique_by=lambda x: x[0],  # Unique prompts
+        )
+    )
     def test_multiple_calls_all_tracked(
         self,
         calls: list[tuple[str, str]],
@@ -596,21 +626,20 @@ class TestMockLLMProvider:
         result = provider.complete(model="test", prompt=prompt)
         assert result == "explicit_response"
 
-    @given(st.lists(
-        st.tuples(simple_text, simple_text),
-        min_size=1,
-        max_size=5,
-        unique_by=lambda x: x[0],
-    ))
+    @given(
+        st.lists(
+            st.tuples(simple_text, simple_text),
+            min_size=1,
+            max_size=5,
+            unique_by=lambda x: x[0],
+        )
+    )
     def test_initialization_with_responses_dict(
         self,
         responses_list: list[tuple[str, str]],
     ) -> None:
         """MockLLMProvider can be initialized with a responses dict."""
-        responses = {
-            prompt_hash(prompt): completion
-            for prompt, completion in responses_list
-        }
+        responses = {prompt_hash(prompt): completion for prompt, completion in responses_list}
         provider = MockLLMProvider(responses=responses)
         for prompt, expected_completion in responses_list:
             result = provider.complete(model="test", prompt=prompt)
@@ -620,6 +649,7 @@ class TestMockLLMProvider:
 # ============================================================================
 # Integration tests for GuideService interaction patterns
 # ============================================================================
+
 
 class TestGuideServiceIntegration:
     """Invariants about GuideService behavior patterns."""
@@ -646,12 +676,14 @@ class TestGuideServiceIntegration:
         # This is the foundation of the cache: same inputs = same key
         assert key1 == key2
 
-    @given(st.lists(
-        st.tuples(simple_text, simple_text),
-        min_size=1,
-        max_size=10,
-        unique_by=lambda x: x[0],
-    ))
+    @given(
+        st.lists(
+            st.tuples(simple_text, simple_text),
+            min_size=1,
+            max_size=10,
+            unique_by=lambda x: x[0],
+        )
+    )
     def test_mock_provider_deterministic_caching(
         self,
         prompts_and_responses: list[tuple[str, str]],
@@ -663,8 +695,7 @@ class TestGuideServiceIntegration:
 
         # First round of calls
         first_results = [
-            provider.complete(model="test", prompt=prompt)
-            for prompt, _ in prompts_and_responses
+            provider.complete(model="test", prompt=prompt) for prompt, _ in prompts_and_responses
         ]
 
         # Second round of calls with fresh provider (same responses)
@@ -673,8 +704,7 @@ class TestGuideServiceIntegration:
             provider2.add(prompt, response)
 
         second_results = [
-            provider2.complete(model="test", prompt=prompt)
-            for prompt, _ in prompts_and_responses
+            provider2.complete(model="test", prompt=prompt) for prompt, _ in prompts_and_responses
         ]
 
         # Results should be identical (deterministic)
@@ -695,8 +725,7 @@ class TestGuideServiceIntegration:
             try:
                 report = validate_markdown_snippets(markdown)
                 assert (
-                    report.validated_blocks + report.skipped_blocks
-                    == report.total_blocks
+                    report.validated_blocks + report.skipped_blocks == report.total_blocks
                 ), f"Invariant violated for: {markdown!r}"
             except SnippetParseError:
                 # Validation errors are acceptable; the invariant only

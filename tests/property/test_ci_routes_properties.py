@@ -94,21 +94,24 @@ def _invalid_pr_number() -> st.SearchStrategy[int]:
 
 def _valid_conclusion() -> st.SearchStrategy[str]:
     """Generate valid GitHub check conclusion strings."""
-    return st.sampled_from([
-        "success",
-        "failure",
-        "neutral",
-        "action_required",
-        "cancelled",
-        "timed_out",
-        "skipped",
-    ])
+    return st.sampled_from(
+        [
+            "success",
+            "failure",
+            "neutral",
+            "action_required",
+            "cancelled",
+            "timed_out",
+            "skipped",
+        ]
+    )
 
 
 def _invalid_conclusion() -> st.SearchStrategy[str]:
     """Generate invalid conclusion strings."""
     return st.text(min_size=1, max_size=50).filter(
-        lambda s: s not in [
+        lambda s: s
+        not in [
             "success",
             "failure",
             "neutral",
@@ -122,28 +125,34 @@ def _invalid_conclusion() -> st.SearchStrategy[str]:
 
 def _valid_report_json() -> st.SearchStrategy[dict[str, Any]]:
     """Generate valid ChangeReport JSON structures."""
-    return st.fixed_dictionaries({
-        "contract_kind": st.sampled_from(["openapi", "proto"]),
-        "ruleset_id": st.text(min_size=1, max_size=50),
-        "summary": st.fixed_dictionaries({
-            "breaking": st.integers(min_value=0, max_value=10),
-            "behavioral": st.integers(min_value=0, max_value=10),
-            "additive": st.integers(min_value=0, max_value=10),
-            "total": st.integers(min_value=0, max_value=30),
-        }),
-        "changes": st.lists(
-            st.fixed_dictionaries({
-                "change_id": st.text(min_size=1, max_size=30),
-                "kind": st.text(min_size=1, max_size=20),
-                "location": st.text(min_size=1, max_size=100),
-                "verdict": st.sampled_from(["additive", "behavioral", "breaking"]),
-                "rule_id": st.text(min_size=1, max_size=30),
-                "rationale": st.text(min_size=1, max_size=200),
-                "affected_clients": st.lists(st.text(min_size=1, max_size=50), max_size=5),
-            }),
-            max_size=5,
-        ),
-    })
+    return st.fixed_dictionaries(
+        {
+            "contract_kind": st.sampled_from(["openapi", "proto"]),
+            "ruleset_id": st.text(min_size=1, max_size=50),
+            "summary": st.fixed_dictionaries(
+                {
+                    "breaking": st.integers(min_value=0, max_value=10),
+                    "behavioral": st.integers(min_value=0, max_value=10),
+                    "additive": st.integers(min_value=0, max_value=10),
+                    "total": st.integers(min_value=0, max_value=30),
+                }
+            ),
+            "changes": st.lists(
+                st.fixed_dictionaries(
+                    {
+                        "change_id": st.text(min_size=1, max_size=30),
+                        "kind": st.text(min_size=1, max_size=20),
+                        "location": st.text(min_size=1, max_size=100),
+                        "verdict": st.sampled_from(["additive", "behavioral", "breaking"]),
+                        "rule_id": st.text(min_size=1, max_size=30),
+                        "rationale": st.text(min_size=1, max_size=200),
+                        "affected_clients": st.lists(st.text(min_size=1, max_size=50), max_size=5),
+                    }
+                ),
+                max_size=5,
+            ),
+        }
+    )
 
 
 def _valid_ci_run_create() -> st.SearchStrategy[CiRunCreate]:
@@ -762,5 +771,3 @@ class TestCiRunPersistence:
         id_2 = response2.json()["id"]
 
         assert id_1 != id_2, "Different repos should produce different run IDs"
-
-

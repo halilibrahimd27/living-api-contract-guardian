@@ -55,14 +55,20 @@ HTTP/gRPC contract space is underserved. The Guardian gives you:
 
 ```
 apps/
-  api/        FastAPI app: /healthz, /services, contract upload
-  cli/        `guardian` Typer CLI: version / health / migrate / diff
+  api/        FastAPI app: /healthz, /services, /diff, /ingest, /ci, /guides
+    routes/
+      services.py  register service + upload contract versions
+      diff.py      POST /diff → classified ChangeReport
+      ingest.py    POST /ingest/traffic + GET /ingest/defacto/{id}
+      ci.py        POST /ci/runs + GET /ci/runs/{owner}/{repo}/{pr}
+      guides.py    GET /guides/{diff_id}/{client_id}
+  cli/        `guardian` Typer CLI: version / health / migrate / mine / diff
   github_app/ Probot 13.x App (Node 20): PR checks + comments
 packages/
   guardian_core/
     db.py       SQLAlchemy engine + session (DATABASE_URL-driven)
-    models.py   Service, Contract, ContractVersion, Endpoint,
-                Client, Usage, Deprecation, InferredEndpoint
+    models.py   all ORM models (Service → Guide)
+    schemas.py  Pydantic v2 HTTP-boundary schemas
     hashing.py  canonicalisation + content hashing of specs
     mining/     tree-sitter based static client miner
       python_visitor.py  requests / httpx / gRPC stub call sites
@@ -86,25 +92,36 @@ packages/
     clients.py     join changes against InferredEndpoint catalogue
     spectral.py    optional Spectral CLI integration (vendored)
     engine.py      diff_contracts() — walk + classify + summarize
-    ...
-alembic/        schema migrations
+    ci_format.py   GitHub Markdown + annotations formatter
+  guardian_guides/ LLM-powered per-client migration guide generator
+    llm.py         LiteLLM provider abstraction + MockLLMProvider
+    service.py     GuideService: cache → prompt → LLM → validate
+    syntax.py      tree-sitter snippet validation
+    prompts/       Jinja2 prompt templates
+alembic/        schema migrations (6 versions)
 fixtures/       sample client repos + labels.yaml (recall corpus)
 tests/          pytest unit suite + Hypothesis property tests
 ```
 
 Data model (one line each):
 
-| Model            | Purpose                                                       |
-|------------------|---------------------------------------------------------------|
-| `Service`        | A named, owned API producer.                                  |
-| `Contract`       | A named spec under a service (`openapi` / `proto`).           |
-| `ContractVersion`| An immutable, content-hashed snapshot (raw + canonical blob). |
-| `Endpoint`       | One operation extracted from a version, with a fingerprint.   |
-| `Client`         | A named API consumer.                                         |
-| `Usage`          | A client's calls to an endpoint over a time window.           |
-| `Deprecation`    | A planned/active deprecation of an endpoint.                  |
-| `InferredEndpoint` | A call site mined from a client repo at a given commit SHA. |
-| `CiRun`          | A persisted GitHub PR check run produced by the App.          |
+| Model               | Purpose                                                              |
+|---------------------|----------------------------------------------------------------------|
+| `Service`           | A named, owned API producer.                                         |
+| `Contract`          | A named spec under a service (`openapi` / `proto`).                  |
+| `ContractVersion`   | An immutable, content-hashed snapshot (raw + canonical blob).        |
+| `Endpoint`          | One operation extracted from a version, with a fingerprint.          |
+| `Client`            | A named API consumer.                                                |
+| `Usage`             | A client's calls to an endpoint over a time window.                  |
+| `Deprecation`       | A planned/active deprecation of an endpoint.                         |
+| `InferredEndpoint`  | A call site mined from a client repo at a given commit SHA.          |
+| `IngestBatch`       | One traffic-ingest invocation; content-hashed for dedup.             |
+| `ObservedEndpoint`  | An endpoint inferred from traffic and merged across batches.         |
+| `FieldUsage`        | Per-field telemetry (count + last_seen_at) under an observed endpoint.|
+| `DefactoContract`   | Materialized static spec ⊕ observed traffic contract.                |
+| `ContractDiff`      | A persisted `ChangeReport` produced by `POST /diff`.                 |
+| `Guide`             | A cached LLM-drafted per-client migration guide.                     |
+| `CiRun`             | A persisted GitHub PR check run produced by the App.                 |
 
 `ChangeReport` (returned by `POST /diff`, not persisted) is a transient
 pydantic-v2 payload: `{contract_kind, changes[ChangeRecord], summary,
@@ -174,17 +191,18 @@ A small fixture corpus under `fixtures/clients/` plus
 
 ### HTTP API (current surface)
 
-| Method | Path                         | Description                          |
-|--------|------------------------------|--------------------------------------|
-| GET    | `/healthz`                   | Deep health: version, git SHA, DB, Redis |
-| POST   | `/services`                  | Register a service                   |
-| GET    | `/services/{id}`             | Fetch a service                      |
-| POST   | `/services/{id}/contracts`   | Upload a contract version (hashed + deduped) |
-| POST   | `/ingest/traffic`            | Ingest HAR + gRPC log → de-facto contract id |
-| GET    | `/ingest/defacto/{id}`       | Fetch a materialized de-facto contract |
-| POST   | `/diff`                      | Diff two contract versions → classified ChangeReport |
-| POST   | `/ci/runs`                   | Upsert a persisted GitHub PR check run (used by the App) |
-| GET    | `/ci/runs/{owner}/{repo}/{pr}` | Most recent persisted CI run for a PR    |
+| Method | Path                            | Description                                              |
+|--------|---------------------------------|----------------------------------------------------------|
+| GET    | `/healthz`                      | Deep health: version, git SHA, DB, Redis                 |
+| POST   | `/services`                     | Register a service                                       |
+| GET    | `/services/{id}`                | Fetch a service                                          |
+| POST   | `/services/{id}/contracts`      | Upload a contract version (hashed + deduped)             |
+| POST   | `/ingest/traffic`               | Ingest HAR + gRPC log → de-facto contract id             |
+| GET    | `/ingest/defacto/{id}`          | Fetch a materialized de-facto contract                   |
+| POST   | `/diff`                         | Diff two contract versions → classified ChangeReport     |
+| POST   | `/ci/runs`                      | Upsert a persisted GitHub PR check run (used by the App) |
+| GET    | `/ci/runs/{owner}/{repo}/{pr}`  | Most recent persisted CI run for a PR                    |
+| GET    | `/guides/{diff_id}/{client_id}` | LLM-drafted migration guide (cached, `text/markdown`)    |
 
 The traffic endpoint accepts a multipart form with `service_id`
 (required), an optional `client_id`, and at least one of `har` (an HTTP

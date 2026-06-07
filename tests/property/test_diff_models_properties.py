@@ -28,6 +28,7 @@ from pydantic import ValidationError
 
 # Strategies for model construction
 
+
 def _raw_change_strategy() -> st.SearchStrategy[RawChange]:
     """Generate valid RawChange objects."""
     kinds = st.text(
@@ -249,9 +250,7 @@ class TestChangeReportSummaryModel:
         st.integers(min_value=0, max_value=100),
         st.integers(min_value=0, max_value=100),
     )
-    def test_summary_subtotals_sum_to_total(
-        self, add: int, behav: int, brk: int
-    ) -> None:
+    def test_summary_subtotals_sum_to_total(self, add: int, behav: int, brk: int) -> None:
         """ChangeReportSummary subtotals sum to total."""
         summary = ChangeReportSummary(
             total=add + behav + brk,
@@ -262,9 +261,7 @@ class TestChangeReportSummaryModel:
         assert summary.total == add + behav + brk
 
     @given(st.lists(_change_record_strategy(), max_size=100))
-    def test_summarize_counts_verdicts_correctly(
-        self, records: list[ChangeRecord]
-    ) -> None:
+    def test_summarize_counts_verdicts_correctly(self, records: list[ChangeRecord]) -> None:
         """_summarize counts verdicts correctly."""
         summary = _summarize(records)
         assert summary.total == len(records)
@@ -278,14 +275,10 @@ class TestChangeReportSummaryModel:
         assert summary.breaking == breaking
 
     @given(st.lists(_change_record_strategy(), max_size=100))
-    def test_summarize_subtotals_sum_to_total(
-        self, records: list[ChangeRecord]
-    ) -> None:
+    def test_summarize_subtotals_sum_to_total(self, records: list[ChangeRecord]) -> None:
         """_summarize subtotals always sum to total."""
         summary = _summarize(records)
-        assert (
-            summary.additive + summary.behavioral + summary.breaking == summary.total
-        )
+        assert summary.additive + summary.behavioral + summary.breaking == summary.total
 
 
 class TestSpectralFindingModel:
@@ -399,9 +392,7 @@ class TestModelSerialization:
         assert restored.rule_id == record.rule_id
 
     @given(_spectral_finding_strategy())
-    def test_spectral_finding_json_serialization(
-        self, finding: SpectralFinding
-    ) -> None:
+    def test_spectral_finding_json_serialization(self, finding: SpectralFinding) -> None:
         """SpectralFinding can be serialized to JSON and deserialized."""
         json_str = finding.model_dump_json()
         restored = SpectralFinding.model_validate_json(json_str)

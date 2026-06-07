@@ -33,9 +33,7 @@ def _minimal_openapi_spec() -> dict[str, Any]:
 def _openapi_with_path(path: str) -> dict[str, Any]:
     """Generate OpenAPI spec with a single path."""
     spec = _minimal_openapi_spec()
-    spec["paths"][path] = {
-        "get": {"responses": {"200": {"description": "OK"}}}
-    }
+    spec["paths"][path] = {"get": {"responses": {"200": {"description": "OK"}}}}
     return spec
 
 
@@ -190,9 +188,7 @@ class TestOpenAPIWithCustomRules:
         # before already has the path/operation; after adds a required param,
         # so the differ emits openapi.parameter.added.required (not path.added).
         before = _minimal_openapi_spec()
-        before["paths"]["/api/users"] = {
-            "post": {"responses": {"200": {"description": "OK"}}}
-        }
+        before["paths"]["/api/users"] = {"post": {"responses": {"200": {"description": "OK"}}}}
         after = _openapi_with_required_param("/api/users", "api_key")
 
         # Custom rule: required parameters are behavioral, not breaking
@@ -214,11 +210,7 @@ rules:
         )
 
         # Should have a required param change classified as behavioral
-        param_changes = [
-            c
-            for c in report.changes
-            if c.kind == "openapi.parameter.added.required"
-        ]
+        param_changes = [c for c in report.changes if c.kind == "openapi.parameter.added.required"]
         assert len(param_changes) > 0
         for change in param_changes:
             assert change.verdict == "behavioral"
@@ -363,9 +355,7 @@ rules:
         """ChangeReport summary totals are always consistent."""
         spec = _minimal_openapi_spec()
         for i in range(num_paths):
-            spec["paths"][f"/path{i}"] = {
-                "get": {"responses": {"200": {"description": "OK"}}}
-            }
+            spec["paths"][f"/path{i}"] = {"get": {"responses": {"200": {"description": "OK"}}}}
 
         report = diff_contracts(
             kind="openapi",
@@ -376,7 +366,5 @@ rules:
         # Summary should always be consistent
         assert report.summary.total == len(report.changes)
         assert (
-            report.summary.additive
-            + report.summary.behavioral
-            + report.summary.breaking
+            report.summary.additive + report.summary.behavioral + report.summary.breaking
         ) == report.summary.total

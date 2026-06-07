@@ -27,9 +27,7 @@ from hypothesis import assume, given
 from hypothesis import strategies as st
 
 
-def _rule_strategy(
-    min_size: int = 1, max_size: int = 10
-) -> st.SearchStrategy[Rule]:
+def _rule_strategy(min_size: int = 1, max_size: int = 10) -> st.SearchStrategy[Rule]:
     """Generate valid Rule objects for custom rulesets."""
     kinds = st.sampled_from(
         [
@@ -183,9 +181,7 @@ rules:
         merged = defaults.merge(custom)
 
         # Find the merged rule
-        merged_rule = next(
-            (r for r in merged.rules if r.id == rule_to_override.id), None
-        )
+        merged_rule = next((r for r in merged.rules if r.id == rule_to_override.id), None)
         assert merged_rule is not None
         assert merged_rule.verdict == "behavioral"
         assert merged_rule.rationale == "Overridden rationale"
@@ -209,9 +205,7 @@ rules:
             assert rule.id in merged_ids
 
     @given(st.lists(_rule_strategy(), min_size=1, max_size=3, unique_by=lambda r: r.id))
-    def test_merged_rules_classify_with_custom_override(
-        self, custom_rules: list[Rule]
-    ) -> None:
+    def test_merged_rules_classify_with_custom_override(self, custom_rules: list[Rule]) -> None:
         """Classification uses custom rules when merged with defaults."""
         defaults = load_default_rules()
         yaml_str = _custom_ruleset_yaml(custom_rules)
@@ -269,9 +263,7 @@ rules:
 
         # Merge both ways
         merged_1_then_2 = defaults.merge(custom1).merge(custom2)
-        merged_both = defaults.merge(
-            RuleSet(id="combined", rules=custom1.rules + custom2.rules)
-        )
+        merged_both = defaults.merge(RuleSet(id="combined", rules=custom1.rules + custom2.rules))
 
         # Both should have all the same rules
         ids_1_2 = {r.id for r in merged_1_then_2.rules}
@@ -407,12 +399,8 @@ class TestCustomRuleEdgeCases:
 
     def test_rule_order_preserved_for_classification(self) -> None:
         """Rule order is preserved after merge, last match wins."""
-        rule1 = Rule(
-            id="R1", kind="test.kind", verdict="additive", rationale="First"
-        )
-        rule2 = Rule(
-            id="R2", kind="test.kind", verdict="breaking", rationale="Second"
-        )
+        rule1 = Rule(id="R1", kind="test.kind", verdict="additive", rationale="First")
+        rule2 = Rule(id="R2", kind="test.kind", verdict="breaking", rationale="Second")
 
         defaults = RuleSet(id="defaults", rules=[rule1])
         custom = RuleSet(id="custom", rules=[rule2])
