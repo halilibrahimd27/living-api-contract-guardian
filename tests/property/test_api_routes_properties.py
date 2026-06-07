@@ -75,7 +75,7 @@ def _contract_upload_openapi_strategy() -> st.SearchStrategy[ContractUpload]:
         name=st.text(min_size=1, max_size=100),
         spec=_openapi_spec_strategy(),
         spec_b64=st.none(),
-        spec_metadata=st.none(),
+        spec_metadata=st.just({}),
     )
 
 
@@ -87,7 +87,7 @@ def _contract_upload_proto_strategy() -> st.SearchStrategy[ContractUpload]:
         name=st.text(min_size=1, max_size=100),
         spec=st.none(),
         spec_b64=_proto_bytes_strategy().map(lambda b: base64.b64encode(b).decode("ascii")),
-        spec_metadata=st.none(),
+        spec_metadata=st.just({}),
     )
 
 
