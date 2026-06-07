@@ -221,9 +221,9 @@ def _upsert_observed_endpoint(
         return existing
     # Refine schemas by merging the new schema with what was stored.
     if request_schema:
-        existing.request_schema = _merge_schema_dicts(existing.request_schema, request_schema)
+        existing.request_schema = merge_json_schemas(existing.request_schema, request_schema)
     if response_schema:
-        existing.response_schema = _merge_schema_dicts(existing.response_schema, response_schema)
+        existing.response_schema = merge_json_schemas(existing.response_schema, response_schema)
     existing.sample_count = int(existing.sample_count or 0) + new_samples
     if _max_timestamp(last_seen_at, existing.last_seen_at) is last_seen_at:
         existing.last_seen_at = last_seen_at
@@ -233,12 +233,6 @@ def _upsert_observed_endpoint(
     # binding belongs to the contract-diff milestone.
     db.flush()
     return existing
-
-
-# Backwards-compatible alias: in-tree call sites and the property-test
-# suite both reference ``_merge_schema_dicts``; the canonical
-# implementation lives in ``guardian_core.traffic._merge``.
-_merge_schema_dicts = merge_json_schemas
 
 
 def _bulk_upsert_field_usages(

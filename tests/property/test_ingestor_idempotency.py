@@ -22,7 +22,7 @@ Invariants tested for traffic ingestor functions:
 3. Handles tz-naive and tz-aware datetimes
 4. Equal timestamps return first argument
 
-**_merge_schema_dicts:**
+**merge_json_schemas:**
 1. Empty schemas return the other schema unchanged
 2. Merging object schemas unions properties
 3. Required fields become intersection when both present
@@ -42,9 +42,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from guardian_core.traffic._merge import merge_json_schemas
 from guardian_core.traffic.ingestor import (
     _max_timestamp,
-    _merge_schema_dicts,
     _parse_timestamp,
     compute_batch_hash,
 )
@@ -322,7 +322,7 @@ class TestMaxTimestamp:
 
 
 # ============================================================================
-# _merge_schema_dicts Tests
+# merge_json_schemas Tests
 # ============================================================================
 
 
@@ -330,20 +330,20 @@ class TestMergeSchemaDicts:
     """Property tests for schema merging."""
 
     def test_empty_first_returns_second(self) -> None:
-        """_merge_schema_dicts({}, b) returns b."""
+        """merge_json_schemas({}, b) returns b."""
         b = {"type": "string"}
-        result = _merge_schema_dicts({}, b)
+        result = merge_json_schemas({}, b)
         assert result == b
 
     def test_empty_second_returns_first(self) -> None:
-        """_merge_schema_dicts(a, {}) returns a."""
+        """merge_json_schemas(a, {}) returns a."""
         a = {"type": "string"}
-        result = _merge_schema_dicts(a, {})
+        result = merge_json_schemas(a, {})
         assert result == a
 
     def test_both_empty_returns_empty(self) -> None:
-        """_merge_schema_dicts({}, {}) returns {}."""
-        result = _merge_schema_dicts({}, {})
+        """merge_json_schemas({}, {}) returns {}."""
+        result = merge_json_schemas({}, {})
         assert result == {}
 
     @given(_object_schema(), _object_schema())
@@ -351,7 +351,7 @@ class TestMergeSchemaDicts:
         self, schema_a: dict[str, Any], schema_b: dict[str, Any]
     ) -> None:
         """Merging two object schemas unions their properties."""
-        result = _merge_schema_dicts(schema_a, schema_b)
+        result = merge_json_schemas(schema_a, schema_b)
         assert isinstance(result, dict)
         if "properties" in result:
             assert isinstance(result["properties"], dict)
@@ -361,7 +361,7 @@ class TestMergeSchemaDicts:
         """Merging required fields follows intersection/union logic."""
         # When both schemas have required fields, intersection makes sense
         # for union types (field must be required in both to be guaranteed)
-        result = _merge_schema_dicts(schema_a, schema_a)
+        result = merge_json_schemas(schema_a, schema_a)
         assert isinstance(result, dict)
         # At minimum, result should be valid
         assert "type" in result or "properties" in result or not result
@@ -370,7 +370,7 @@ class TestMergeSchemaDicts:
         """Non-object schemas prefer the second argument."""
         a = {"type": "string"}
         b = {"type": "integer"}
-        result = _merge_schema_dicts(a, b)
+        result = merge_json_schemas(a, b)
         assert result == b
 
     @given(
@@ -393,7 +393,7 @@ class TestMergeSchemaDicts:
         """Merging nested object properties is recursive."""
         schema_a = {"type": "object", "properties": nested_a}
         schema_b = {"type": "object", "properties": nested_b}
-        result = _merge_schema_dicts(schema_a, schema_b)
+        result = merge_json_schemas(schema_a, schema_b)
         assert isinstance(result, dict)
         if "properties" in result:
             # Union of keys should be present
@@ -405,14 +405,14 @@ class TestMergeSchemaDicts:
         """When schemas have different types, second is preferred."""
         a = {"type": "object"}
         b = {"type": "array"}
-        result = _merge_schema_dicts(a, b)
+        result = merge_json_schemas(a, b)
         assert result == b
 
     def test_merge_preserves_additional_metadata(self) -> None:
         """Non-conflicting metadata from first schema is preserved."""
         a = {"type": "object", "description": "first", "properties": {"x": {"type": "string"}}}
         b = {"type": "object", "properties": {"y": {"type": "integer"}}}
-        result = _merge_schema_dicts(a, b)
+        result = merge_json_schemas(a, b)
         # Result should be an object type
         assert result.get("type") == "object"
         # Should have merged properties
@@ -482,7 +482,7 @@ class TestIdempotencyProperties:
             "properties": {"id": {"type": "integer"}, "name": {"type": "string"}},
             "required": ["id"],
         }
-        result = _merge_schema_dicts(schema, schema)
+        result = merge_json_schemas(schema, schema)
         # Result should be semantically equivalent
         assert isinstance(result, dict)
         assert result.get("type") == "object"
@@ -497,8 +497,8 @@ class TestIdempotencyProperties:
         schema_c = {"type": "object", "properties": {}}
 
         # Both should result in valid object schemas
-        result1 = _merge_schema_dicts(_merge_schema_dicts(schema_a, schema_b), schema_c)
-        result2 = _merge_schema_dicts(schema_a, _merge_schema_dicts(schema_b, schema_c))
+        result1 = merge_json_schemas(merge_json_schemas(schema_a, schema_b), schema_c)
+        result2 = merge_json_schemas(schema_a, merge_json_schemas(schema_b, schema_c))
 
         # Both results should be dicts
         assert isinstance(result1, dict)

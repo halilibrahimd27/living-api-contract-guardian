@@ -14,7 +14,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import cast, get_args
 
-import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from guardian_campaigns.schemas import (
     CampaignCreate,
@@ -26,13 +25,14 @@ from guardian_campaigns.schemas import (
     MetricPoint,
     ReminderPRRead,
 )
+from guardian_core.logging import get_logger
 from guardian_core.models import Campaign, CampaignMetric, ReminderPR
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from apps.api.deps import get_db
 
-log = structlog.get_logger(__name__)
+log = get_logger(__name__)
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 

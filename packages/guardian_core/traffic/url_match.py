@@ -17,14 +17,6 @@ from urllib.parse import urlsplit
 from guardian_core.mining.path_normalize import abstract_static_segments
 
 _TEMPLATE_RE = re.compile(r"^\{([^}]+)\}$")
-# Heuristic: a path segment that *looks* like an opaque id when no static
-# OpenAPI template matched. Mirrors the constants in ``path_normalize``
-# (which serves the static-miner side); duplicated here so the two
-# subsystems can evolve independently.
-_UUID_RE = re.compile(
-    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-)
-_NUMERIC_RE = re.compile(r"^\d+$")
 
 
 @dataclass
@@ -132,15 +124,6 @@ def normalize_observed_path(
         matched = tree.match(method, path)
     if matched is not None:
         return matched, matched
-    # Heuristic: collapse numeric/UUID segments.
-    segments = [s for s in path.split("/") if s]
-    out: list[str] = []
-    for seg in segments:
-        if _NUMERIC_RE.match(seg) or _UUID_RE.match(seg):
-            out.append("{id}")
-        else:
-            out.append(seg)
-    templated = "/" + "/".join(out) if out else "/"
-    # Defensive double-collapse in case `abstract_static_segments` finds more.
-    templated = abstract_static_segments(templated) or templated
+    # Heuristic: collapse numeric / UUID path segments to ``{id}``.
+    templated = abstract_static_segments(path) or path
     return templated, None

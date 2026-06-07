@@ -13,12 +13,12 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import NamedTuple
 
-import structlog
+from guardian_core.logging import get_logger
 from guardian_core.models import CampaignMetric
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-log = structlog.get_logger(__name__)
+log = get_logger(__name__)
 
 
 class DecaySample(NamedTuple):

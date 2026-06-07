@@ -14,9 +14,9 @@ from __future__ import annotations
 import os
 from typing import Any
 
-import structlog
+from guardian_core.logging import get_logger
 
-log = structlog.get_logger(__name__)
+log = get_logger(__name__)
 
 _DEFAULT_BODY = """\
 ## Deprecation reminder

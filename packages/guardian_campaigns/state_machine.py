@@ -28,13 +28,13 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING, Any
 
-import structlog
+from guardian_core.logging import get_logger
 from transitions import Machine
 
 if TYPE_CHECKING:
     pass
 
-log = structlog.get_logger(__name__)
+log = get_logger(__name__)
 
 # Minimum seconds between automatic transitions on the same FSM instance.
 # Prevents tight-loop re-evaluation when guard conditions oscillate near

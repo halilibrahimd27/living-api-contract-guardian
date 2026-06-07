@@ -76,13 +76,13 @@ def build_defacto_contract(
             request_body = op.setdefault("requestBody", {})
             content = request_body.setdefault("content", {})
             json_ct = content.setdefault("application/json", {})
-            json_ct["schema"] = _merge_schemas(json_ct.get("schema"), req_schema)
+            json_ct["schema"] = merge_json_schemas(json_ct.get("schema"), req_schema)
         if resp_schema:
             responses = op.setdefault("responses", {})
             status_obj = responses.setdefault("200", {"description": "observed"})
             content = status_obj.setdefault("content", {})
             json_ct = content.setdefault("application/json", {})
-            json_ct["schema"] = _merge_schemas(json_ct.get("schema"), resp_schema)
+            json_ct["schema"] = merge_json_schemas(json_ct.get("schema"), resp_schema)
 
         # Telemetry annotations.
         op["x-sample-count"] = int(obs.get("sample_count", 0))
@@ -103,8 +103,3 @@ def build_defacto_contract(
             value["x-source"] = "static"
 
     return base
-
-
-# Backwards-compatible alias: callers within this module use ``_merge_schemas``;
-# the canonical implementation lives in ``guardian_core.traffic._merge``.
-_merge_schemas = merge_json_schemas

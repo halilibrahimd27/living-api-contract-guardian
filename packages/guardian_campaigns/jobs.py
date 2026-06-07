@@ -18,8 +18,8 @@ import os
 from datetime import UTC, datetime
 from typing import TypeVar
 
-import structlog
 from guardian_core.db import session_scope
+from guardian_core.logging import get_logger
 from guardian_core.models import Campaign, ReminderPR
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -28,7 +28,7 @@ from sqlalchemy.sql import Select
 from guardian_campaigns.decay import get_rolling_usage, record_metric
 from guardian_campaigns.state_machine import CampaignFSM
 
-log = structlog.get_logger(__name__)
+log = get_logger(__name__)
 
 _T = TypeVar("_T")
 

@@ -15,10 +15,10 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
-import structlog
+from guardian_core.logging import get_logger
 from guardian_core.redis_client import get_redis_url
 
-log = structlog.get_logger(__name__)
+log = get_logger(__name__)
 
 _QUEUE_NAMES = {
     "high": "campaigns-high",
