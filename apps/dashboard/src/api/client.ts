@@ -6,10 +6,14 @@ import type {
   ServiceRead,
 } from "./types"
 
+// Server-side components use INTERNAL_API_URL (set at runtime in Docker/k8s).
+// Client-side components fall back to NEXT_PUBLIC_API_URL (set at build time).
 const API_BASE =
   typeof window !== "undefined"
     ? (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000")
-    : (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000")
+    : (process.env.INTERNAL_API_URL ??
+       process.env.NEXT_PUBLIC_API_URL ??
+       "http://localhost:8000")
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
