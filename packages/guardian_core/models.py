@@ -8,13 +8,14 @@ elsewhere (e.g. SQLite for tests).
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 import uuid_utils
 from sqlalchemy import (
     JSON,
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -511,3 +512,115 @@ class Deprecation(Base):
         "ContractVersion", back_populates="deprecations"
     )
     endpoint: Mapped[Endpoint] = relationship("Endpoint")
+
+
+# ---------------------------------------------------------------------------
+# Campaign orchestrator models (Milestone 7)
+# ---------------------------------------------------------------------------
+
+CampaignState = Literal["draft", "active", "decaying", "ready_to_remove", "completed", "aborted"]
+
+
+class Campaign(Base):
+    """A deprecation campaign tracking one endpoint or field through decay.
+
+    The campaign lifecycle is managed by a transitions state machine
+    (see ``guardian_campaigns.state_machine``).  Usage telemetry is
+    periodically sampled via RQ jobs and stored in ``CampaignMetric``
+    rows whose EWMA value drives automated state transitions.
+    """
+
+    __tablename__ = "campaigns"
+    __table_args__ = (Index("ix_campaigns_state", "state"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    # Optional link to the static-contract endpoint being deprecated.
+    endpoint_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("endpoints.id", ondelete="SET NULL"), nullable=True
+    )
+    # For field-level deprecations the path (e.g. "$.response.body.legacyField").
+    field_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    # FSM state – one of CampaignState literals.
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="draft")
+    # Usage drops below this % of peak_usage → transition active→decaying.
+    usage_threshold_pct: Mapped[float] = mapped_column(Float(), nullable=False, default=5.0)
+    # Rolling window used for EWMA computation.
+    decay_window_days: Mapped[int] = mapped_column(Integer(), nullable=False, default=30)
+    # Peak rolling-window usage seen at ``activate`` time; used for % guard.
+    peak_usage: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    # Owner/repo slug of the *primary* client repo for reminder PRs.
+    github_repo: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow
+    )
+
+    endpoint: Mapped[Endpoint | None] = relationship("Endpoint")
+    metrics: Mapped[list[CampaignMetric]] = relationship(
+        "CampaignMetric", back_populates="campaign", cascade="all, delete-orphan"
+    )
+    reminder_prs: Mapped[list[ReminderPR]] = relationship(
+        "ReminderPR", back_populates="campaign", cascade="all, delete-orphan"
+    )
+
+
+class CampaignMetric(Base):
+    """One EWMA sample for a campaign's usage decay curve.
+
+    Sampled by the ``evaluate_campaign`` RQ job.  Stored separately so
+    ``GET /campaigns/{id}`` can read the chart data with a single query
+    instead of recomputing it from raw ``usages`` rows.
+    """
+
+    __tablename__ = "campaign_metrics"
+    __table_args__ = (Index("ix_campaign_metrics_campaign_sampled", "campaign_id", "sampled_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    campaign_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False
+    )
+    sampled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    usage_count: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    ewma_value: Mapped[float] = mapped_column(Float(), nullable=False, default=0.0)
+    remaining_client_count: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
+    )
+
+    campaign: Mapped[Campaign] = relationship("Campaign", back_populates="metrics")
+
+
+class ReminderPR(Base):
+    """A reminder pull-request opened on a client repo for a campaign.
+
+    The ``branch_name`` (``guardian/deprecate-<campaign_id>``) is the
+    idempotency key: the job skips PR creation when GitHub already has an
+    open PR for that branch.
+    """
+
+    __tablename__ = "reminder_prs"
+    __table_args__ = (
+        UniqueConstraint("campaign_id", "client_repo", name="uq_reminder_prs_campaign_repo"),
+        Index("ix_reminder_prs_campaign", "campaign_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
+    campaign_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False
+    )
+    client_repo: Mapped[str] = mapped_column(String(512), nullable=False)
+    pr_number: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    branch_name: Mapped[str] = mapped_column(String(512), nullable=False)
+    pr_state: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow
+    )
+
+    campaign: Mapped[Campaign] = relationship("Campaign", back_populates="reminder_prs")
