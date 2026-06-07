@@ -942,8 +942,6 @@ class TestGuideRequest:
     @given(st.integers(max_value=0))
     def test_max_call_sites_zero_or_negative_invalid(self, max_call_sites: int) -> None:
         """GuideRequest rejects max_call_sites <= 0."""
-        from pydantic import ValidationError
-
         with pytest.raises(ValidationError):
             GuideRequest(
                 diff_id="d",
@@ -955,8 +953,6 @@ class TestGuideRequest:
     @given(st.integers(min_value=51))
     def test_max_call_sites_over_limit_invalid(self, max_call_sites: int) -> None:
         """GuideRequest rejects max_call_sites > 50."""
-        from pydantic import ValidationError
-
         with pytest.raises(ValidationError):
             GuideRequest(
                 diff_id="d",
@@ -968,8 +964,6 @@ class TestGuideRequest:
 
 class TestGuideResult:
     """Invariants about GuideResult model."""
-
-    from guardian_guides import GuideResult
 
     @given(guide_results())
     def test_model_creation_with_valid_inputs(
@@ -1060,8 +1054,6 @@ class TestGuideResult:
 class TestCallSiteContext:
     """Invariants about CallSiteContext model."""
 
-    from guardian_guides import CallSiteContext
-
     @given(call_site_contexts())
     def test_model_creation_with_valid_inputs(
         self,
@@ -1131,8 +1123,6 @@ class TestCallSiteContext:
     @given(st.integers(max_value=0))
     def test_line_zero_or_negative_invalid(self, line: int) -> None:
         """CallSiteContext rejects line <= 0."""
-        from pydantic import ValidationError
-
         with pytest.raises(ValidationError):
             CallSiteContext(
                 repo="r",
@@ -1147,8 +1137,6 @@ class TestCallSiteContext:
     @given(st.text(max_size=0))
     def test_empty_repo_invalid(self, repo: str) -> None:
         """CallSiteContext rejects empty repo."""
-        from pydantic import ValidationError
-
         assume(len(repo.strip()) == 0)
         with pytest.raises(ValidationError):
             CallSiteContext(
@@ -1187,8 +1175,6 @@ class TestCallSiteContext:
 class TestChangeSummary:
     """Invariants about ChangeSummary model."""
 
-    from guardian_guides import ChangeSummary
-
     @given(change_summaries())
     def test_model_creation_with_valid_inputs(
         self,
@@ -1214,8 +1200,6 @@ class TestChangeSummary:
     @given(st.sampled_from(["invalid", "unknown", "neutral"]))
     def test_invalid_verdict_rejected(self, invalid_verdict: str) -> None:
         """ChangeSummary rejects verdicts not in {additive, behavioral, breaking}."""
-        from pydantic import ValidationError
-
         with pytest.raises(ValidationError):
             ChangeSummary(
                 change_id="id",
