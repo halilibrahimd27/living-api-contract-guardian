@@ -18,7 +18,7 @@ from tree_sitter import Node, Parser
 from tree_sitter_languages import get_parser
 
 _FENCE_RE = re.compile(
-    r"```(?P<lang>[A-Za-z0-9_+-]+)?\s*\n(?P<body>.*?)\n```",
+    r"```(?P<lang>[A-Za-z0-9_+-]+)?[ \t]*\n(?P<body>.*?)\n```",
     re.DOTALL,
 )
 
