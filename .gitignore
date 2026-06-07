@@ -17,3 +17,8 @@ build/
 .idea/
 .vscode/
 .hypothesis/
+
+# Next.js dashboard
+apps/dashboard/node_modules/
+apps/dashboard/.next/
+apps/dashboard/out/

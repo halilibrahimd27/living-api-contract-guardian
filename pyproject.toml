@@ -151,3 +151,6 @@ asyncio_mode = "auto"
 # fixture tests pin themselves tighter with @pytest.mark.timeout(...).
 timeout = 60
 timeout_method = "thread"
+markers = [
+  "e2e: end-to-end integration tests that require a live stack (see tests/e2e/)",
+]
