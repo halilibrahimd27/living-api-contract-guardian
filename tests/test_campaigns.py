@@ -245,9 +245,7 @@ class TestCampaignAPI:
         # peak_usage=0, so guard passes immediately
         assert data["new_state"] == "decaying"
 
-    def test_get_campaign_decay_curve_populated_after_evaluate(
-        self, client: TestClient
-    ) -> None:
+    def test_get_campaign_decay_curve_populated_after_evaluate(self, client: TestClient) -> None:
         resp = client.post("/campaigns", json={"name": "Curve test"})
         cid = resp.json()["id"]
         client.post(

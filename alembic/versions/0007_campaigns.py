@@ -120,9 +120,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_reminder_prs_campaign", table_name="reminder_prs")
     op.drop_table("reminder_prs")
-    op.drop_index(
-        "ix_campaign_metrics_campaign_sampled", table_name="campaign_metrics"
-    )
+    op.drop_index("ix_campaign_metrics_campaign_sampled", table_name="campaign_metrics")
     op.drop_table("campaign_metrics")
     op.drop_index("ix_campaigns_state", table_name="campaigns")
     op.drop_table("campaigns")

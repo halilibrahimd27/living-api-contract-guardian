@@ -7,9 +7,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-CampaignState = Literal[
-    "draft", "active", "decaying", "ready_to_remove", "completed", "aborted"
-]
+CampaignState = Literal["draft", "active", "decaying", "ready_to_remove", "completed", "aborted"]
 
 
 class CampaignCreate(BaseModel):

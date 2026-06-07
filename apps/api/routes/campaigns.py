@@ -88,9 +88,7 @@ def _build_read(campaign: Campaign, session: Session) -> CampaignRead:
     remaining_clients = [pr.client_repo for pr in pr_rows_open]
 
     all_pr_rows = (
-        session.execute(
-            select(ReminderPR).where(ReminderPR.campaign_id == campaign.id)
-        )
+        session.execute(select(ReminderPR).where(ReminderPR.campaign_id == campaign.id))
         .scalars()
         .all()
     )
@@ -130,11 +128,7 @@ def list_campaigns(
 ) -> list[CampaignRead]:
     """List all deprecation campaigns ordered by creation date."""
     campaigns = (
-        session.execute(
-            select(Campaign).order_by(Campaign.created_at.desc())
-        )
-        .scalars()
-        .all()
+        session.execute(select(Campaign).order_by(Campaign.created_at.desc())).scalars().all()
     )
     return [_build_read(c, session) for c in campaigns]
 

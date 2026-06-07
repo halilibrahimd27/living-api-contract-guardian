@@ -269,11 +269,7 @@ def _build_patch_suggestion(session: Session, campaign_id: str) -> str:
 
     # Find the most recent guide row for any diff.
     guide = (
-        session.execute(
-            select(Guide).order_by(Guide.created_at.desc()).limit(1)
-        )
-        .scalars()
-        .first()
+        session.execute(select(Guide).order_by(Guide.created_at.desc()).limit(1)).scalars().first()
     )
     if guide is None:
         return ""

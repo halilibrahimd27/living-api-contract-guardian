@@ -116,9 +116,7 @@ def demo_service(http: httpx.Client) -> dict[str, object]:
 
 
 @pytest.fixture(scope="module")
-def demo_contract_v1(
-    http: httpx.Client, demo_service: dict[str, object]
-) -> dict[str, object]:
+def demo_contract_v1(http: httpx.Client, demo_service: dict[str, object]) -> dict[str, object]:
     """Upload the v1 contract for the demo service."""
     service_id: str = str(demo_service["id"])
     resp = http.post(
@@ -140,9 +138,7 @@ def demo_contract_v1(
 
 
 @pytest.fixture(scope="module")
-def demo_contract_v2(
-    http: httpx.Client, demo_service: dict[str, object]
-) -> dict[str, object]:
+def demo_contract_v2(http: httpx.Client, demo_service: dict[str, object]) -> dict[str, object]:
     """Upload the v2 contract for the demo service."""
     service_id: str = str(demo_service["id"])
     resp = http.post(
@@ -213,9 +209,9 @@ def test_diff_has_breaking_changes(demo_diff: dict[str, object]) -> None:
     """Removing /users/{id} must be flagged as breaking."""
     summary = demo_diff["summary"]
     assert isinstance(summary, dict)
-    assert summary["breaking"] >= 1, (
-        f"Expected at least 1 breaking change, got {summary['breaking']}"
-    )
+    assert (
+        summary["breaking"] >= 1
+    ), f"Expected at least 1 breaking change, got {summary['breaking']}"
 
 
 def test_diff_summary_totals(demo_diff: dict[str, object]) -> None:
@@ -269,9 +265,7 @@ def test_campaign_created_in_draft(demo_campaign: dict[str, object]) -> None:
     assert demo_campaign["remaining_clients"] == []
 
 
-def test_campaign_activate_transition(
-    http: httpx.Client, demo_campaign: dict[str, object]
-) -> None:
+def test_campaign_activate_transition(http: httpx.Client, demo_campaign: dict[str, object]) -> None:
     """Activate the campaign with a known peak_usage."""
     campaign_id: str = str(demo_campaign["id"])
     resp = http.post(
@@ -285,9 +279,7 @@ def test_campaign_activate_transition(
     log.info("e2e.campaign.activated", campaign_id=campaign_id)
 
 
-def test_campaign_evaluate_inline(
-    http: httpx.Client, demo_campaign: dict[str, object]
-) -> None:
+def test_campaign_evaluate_inline(http: httpx.Client, demo_campaign: dict[str, object]) -> None:
     """Run the inline evaluator and check we get a metric back."""
     campaign_id: str = str(demo_campaign["id"])
     resp = http.post(f"/campaigns/{campaign_id}/evaluate")
