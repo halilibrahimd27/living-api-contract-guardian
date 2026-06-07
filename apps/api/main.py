@@ -10,6 +10,7 @@ from guardian_core.schemas import HealthResponse
 from guardian_core.version import get_git_sha, get_version
 from sqlalchemy import text
 
+from apps.api.routes.campaigns import router as campaigns_router
 from apps.api.routes.ci import router as ci_router
 from apps.api.routes.diff import router as diff_router
 from apps.api.routes.guides import router as guides_router
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
     app.include_router(diff_router)
     app.include_router(ci_router)
     app.include_router(guides_router)
+    app.include_router(campaigns_router)
 
     log = get_logger("api")
 
