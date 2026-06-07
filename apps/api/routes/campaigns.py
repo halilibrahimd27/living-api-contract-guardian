@@ -29,6 +29,7 @@ from guardian_core.logging import get_logger
 from guardian_core.models import Campaign, CampaignMetric, ReminderPR
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from transitions import MachineError
 
 from apps.api.deps import get_db
 
@@ -210,15 +211,15 @@ def transition_campaign(
         try:
             fsm.activate(peak_usage=body.peak_usage)  # type: ignore[attr-defined]
             campaign.peak_usage = body.peak_usage
-        except Exception as exc:
+        except MachineError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
     else:
         trigger_fn = getattr(fsm, body.trigger, None)
-        if trigger_fn is None:
+        if trigger_fn is None or not callable(trigger_fn):
             raise HTTPException(status_code=422, detail=f"Unknown trigger: {body.trigger}")
         try:
             trigger_fn()
-        except Exception as exc:
+        except MachineError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     campaign.state = fsm.current_state

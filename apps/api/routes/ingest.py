@@ -86,7 +86,11 @@ async def ingest_traffic_route(
         db.commit()
     except ValueError as exc:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        log.warning("ingest.traffic.invalid", service_id=service_id, error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid traffic payload",
+        ) from exc
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(

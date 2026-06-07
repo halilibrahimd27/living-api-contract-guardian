@@ -157,8 +157,11 @@ def _maybe_schedule_reminder(session: Session, campaign: Campaign) -> None:
         pr_state="pending",
     )
     session.add(pr_row)
-    # Flush so the PK is assigned before we enqueue.
-    session.flush()
+    # Commit the row *before* enqueuing so the send_reminder_pr worker can
+    # never observe an uncommitted ReminderPR (nor collide with this row on
+    # the unique (campaign_id, client_repo) key if it races ahead). If the
+    # enqueue below fails, the pending row is reconciled on the next evaluate.
+    session.commit()
 
     schedule_reminder_pr(campaign.id, campaign.github_repo, delay_seconds=0)
 

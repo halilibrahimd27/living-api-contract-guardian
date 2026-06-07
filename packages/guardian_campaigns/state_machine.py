@@ -29,7 +29,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from guardian_core.logging import get_logger
-from transitions import Machine
+from transitions import Machine, MachineError
 
 if TYPE_CHECKING:
     pass
@@ -233,8 +233,10 @@ class CampaignFSM:
             # Check if we're in the right source state and the trigger exists.
             try:
                 result = getattr(self, trigger)()
-            except Exception:
-                # transitions raises MachineError when trigger not valid for state.
+            except MachineError:
+                # Trigger not valid from the current source state — a real
+                # bug in a guard/callback now surfaces instead of being
+                # swallowed. Try the next trigger in order.
                 continue
             if result:
                 fired = trigger

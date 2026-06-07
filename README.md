@@ -441,6 +441,31 @@ make test                    # pytest -q  (unit + Hypothesis property tests)
 `make verify` is what GitHub Actions runs on every push — see
 `.github/workflows/ci.yml`. The Reviewer uses the same gate.
 
+## Security model
+
+The Guardian ships as a **self-hostable, single-tenant registry** and
+assumes it runs on a trusted network (behind your VPN / service mesh /
+ingress auth). With that in mind:
+
+- **Authentication is opt-in.** Set `GUARDIAN_API_KEY` and every request
+  outside the health + docs surface (`/health`, `/healthz`, `/docs`,
+  `/redoc`, `/openapi.json`) must present that key via an `X-API-Key`
+  header or `Authorization: Bearer <key>`. The comparison is
+  constant-time (`hmac.compare_digest`). Leave the var unset for local
+  development and the API stays open. The key is a single shared secret —
+  there is no per-user authz or multi-tenancy — so terminate stronger
+  auth (mTLS, OIDC) at your ingress for internet-facing deployments.
+- **Input is validated at the boundary** by pydantic-v2 models; uploads
+  are size-capped (64 MiB/stream) and all DB access goes through the
+  SQLAlchemy ORM (no string-built SQL).
+- **GitHub webhooks are HMAC-verified** by `@octokit/webhooks` before any
+  handler runs; the Probot app only ever shells out to the `guardian`
+  CLI (list-form `subprocess`, no shell).
+- **Error responses are deliberately terse** — internal exception detail
+  is logged server-side, not returned to callers. (The `/guides` 502
+  reason is the one intentional exception, since it reflects the LLM's
+  own output, not Guardian internals.)
+
 ## License
 
 See repository.

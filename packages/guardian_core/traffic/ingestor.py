@@ -104,9 +104,12 @@ def _parse_timestamp(raw: str | None) -> datetime:
         # datetime.fromisoformat handles trailing 'Z' from Python 3.11+
         if raw.endswith("Z"):
             raw = raw[:-1] + "+00:00"
-        return datetime.fromisoformat(raw)
+        parsed = datetime.fromisoformat(raw)
     except ValueError:
         return _utcnow()
+    # ISO strings without an offset parse to a naive datetime; normalize to
+    # UTC so every timestamp the ingestor stores/compares is tz-aware.
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 
 def compute_batch_hash(har_bytes: bytes | None, grpc_bytes: bytes | None) -> str:
